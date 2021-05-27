@@ -1,2 +1,2 @@
 # genSV
-A tool for genotyping structural variations from next generation sequencing data (ONT/PacBio)
+A tool for genotyping structural variations from third generation sequencing data (ONT/PacBio)
