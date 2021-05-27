@@ -1,0 +1,688 @@
+import pysam
+import glob
+import pandas as pd
+import numpy as np
+import sys
+from math import log10, factorial
+import subprocess
+from alignment.local_alignment import AlignmentScore
+#import libs.mylibs as mylibs
+
+class sv_class:
+	def __init__(self, svtype, chrom, start, stop, chr2, svlen):
+		self.chrom = chrom
+		self.start = start
+		self.stop = stop
+		self.info = {'SVTYPE':svtype, 'SVLEN':svlen, 'CHR2':chr2}
+
+def infer_gt(DR, DV, p_err):
+	
+	#max_D = 1000
+
+	#if DV == 0:
+	#	return '0/0'
+
+	#if (DR > max_D) or (DV > max_D):
+	#	return './.'
+
+	try:
+		p_D_01 = (0.5**DR) * (0.5**DV)
+	except:
+		print('probability calculation problem p_D_01, DR:', DR, 'DV:', DV)
+		p_D_01 = 0.0
+
+	try:
+		p_D_11 = (p_err**DR) * ((1.-p_err)**DV)
+	except:
+		print('probability calculation problem p_D_11, DR:', DR, 'DV:', DV)
+		p_D_11 = 0.0
+
+	try:
+		p_D_00 = ((1.-p_err)**DR) * (p_err**DV)
+	except:
+		print('probability calculation problem p_D_00, DR:', DR, 'DV:', DV)
+		p_D_00 = 0.0
+	
+	p_G = 1./3.
+	p_D = (p_D_00 + p_D_01 + p_D_11)*p_G
+	if p_D == 0:
+		return './.', 0, 0, 0, 0
+		#print('p_D_00:', p_D_00)
+		#print('p_D_01:', p_D_01)
+		#print('p_D_11:', p_D_11)
+		#print('DR:', DR)
+		#print('DV:', DV)
+	# + 1e-12
+	p_01_D = p_D_01 * p_G / p_D
+	p_11_D = p_D_11 * p_G / p_D
+	p_00_D = p_D_00 * p_G / p_D
+
+	probs = [(p_01_D, '0/1', 1), (p_11_D, '1/1', 2), (p_00_D, '0/0', 0)]
+	probs_sorted = sorted(probs, key=lambda x: x[0], reverse=True)
+	GQ = round(-10.*log10(max(1. - probs_sorted[0][0], 1e-100)))
+
+	return probs_sorted[0][1], GQ, p_11_D, p_01_D, p_00_D
+
+def infer_gt_str(count_list, p_err, svtype):
+	if len(count_list) == 0:
+		return './.', 0
+	r = 2.*p_err/(1.-p_err)
+	#print('r:', r)
+	count_set = set(count_list)
+	count_uniq_sorted_list = sorted(list(count_set))
+	#print('count_uniq_sorted_list:', count_uniq_sorted_list)
+	genotype_list = []
+	for i in range(len(count_uniq_sorted_list)):
+		for j in range(i,len(count_uniq_sorted_list)):
+			genotype_list.append((count_uniq_sorted_list[i], count_uniq_sorted_list[j]))
+	#print('genotype_list:', genotype_list)
+
+	prob_C = {}
+	for c_tuple in genotype_list:
+		ci, cj = c_tuple
+		prob_C[(ci,cj)] = 1.
+		for c in count_list:
+			if ci==cj and c==ci:
+				prob_c = 1. - r
+			elif c==ci:
+				prob_c = 0.5*((1.-r)+p_err**(abs(c-cj)))
+			elif c==cj:
+				prob_c = 0.5*((1.-r)+p_err**(abs(c-ci)))
+			else:
+				prob_c = 0.5*(p_err**(abs(c-ci)) + p_err**(abs(c-cj)))
+			prob_C[(ci,cj)] *= prob_c
+	#print('prob_C:', prob_C)
+	prob_C_sum = 0
+	for c_tuple in genotype_list:
+		ci, cj = c_tuple
+		prob_C_sum += prob_C[(ci,cj)]
+	if prob_C_sum==0:
+		return './.', 0
+	prob_gt = {}
+	for c_tuple in genotype_list:
+		ci, cj = c_tuple
+		prob_gt[(ci,cj)] = prob_C[(ci,cj)]/prob_C_sum
+	#print('prob_gt:', prob_gt)
+	genotype, prob = sorted(prob_gt.items(), key=lambda x:x[1], reverse=True)[0]
+	if svtype == 'INS' or svtype == 'DUP':
+		GT = str(genotype[0])+'/'+str(genotype[1])
+	elif svtype == 'DEL':
+		GT = str(-genotype[0])+'/'+str(-genotype[1])
+	else:
+		assert 0==1, 'unsupported svtype: '+svtype
+	GQ = round(-10.*log10(max(1. - prob, 1e-100)))
+	
+	return GT, GQ
+
+def sv_signiture(read, target_sv):
+
+	CG_read_supp = False
+	SA_read_supp = False
+	locus_read = False
+
+	CG_read_name = ''
+	SA_read_name = ''
+	locus_read_name = ''
+	
+	target_svtype = target_sv.info['SVTYPE']
+	target_svlen = abs(target_sv.info['SVLEN'])
+	target_start = target_sv.start
+	target_stop = target_sv.stop
+	
+	### settings:
+	mapping_quality_thr = 20
+	d_max = 500
+	#region_buffer_left = target_start - min(target_svlen, d_max)
+	#region_buffer_right = target_stop + min(target_svlen, d_max)
+	region_buffer_left = target_start - d_max
+	region_buffer_right = target_stop + d_max
+	len_ratio_tol = 0.25
+	ins_len_thr = 20
+	del_len_thr = 20
+
+	read_chrom = read.reference_name
+	read_ref_start = read.reference_start
+	read_ref_stop = read.reference_end
+	read_ref_span = read_ref_stop - read_ref_start
+	read_al_len = read.query_alignment_length
+	read_al_start = read.query_alignment_start
+	read_al_stop = read.query_alignment_end
+	read_strand = '+'
+	if read.is_reverse:
+		read_strand = '-'
+
+	### 100 is an arbitrary length
+	if (target_start - 100 > read_ref_start) and (target_start - 100 < read_ref_stop):
+		locus_read = True
+		locus_read_name = read.query_name
+	elif (target_start + 100 > read_ref_start) and (target_start + 100 < read_ref_stop):
+		locus_read = True
+		locus_read_name = read.query_name
+	elif (target_stop - 100 > read_ref_start) and (target_stop - 100 < read_ref_stop):
+		locus_read = True
+		locus_read_name = read.query_name
+	elif (target_stop + 100 > read_ref_start) and (target_stop + 100 < read_ref_stop):
+		locus_read = True
+		locus_read_name = read.query_name
+
+	if not locus_read:
+		return '', '', ''
+
+	#print('read_ref_start:', read_ref_start)
+	#print('read_ref_stop:', read_ref_stop)
+	#print('read_ref_span:', read_ref_span)
+	#print('read_al_len:', read_al_len)
+	#print('read_strand:', read_strand)
+
+	#print('read.query_alignment_length:')
+	#print(read.query_alignment_length)
+	#print('read.query_length:')
+	#print(read.query_length)
+	#print('len(read.query_sequence):')
+	#print(len(read.query_sequence))
+	#print('len(read.query_alignment_sequence):')
+	#print(len(read.query_alignment_sequence))
+
+	cigar_t = read.cigartuples
+	ind_start = -1
+	ind_end = -1
+	for i, c in enumerate(cigar_t):
+		if c[0] != 4:
+			ind_start = i
+			break
+	for i in range(len(cigar_t)-1,-1,-1):
+		c = cigar_t[i]
+		if c[0] != 4:
+			ind_end = i
+			break
+	assert ind_start != -1, 'wrong ind_start '+str(cigar_t)
+	assert ind_end != -1, 'wrong ind_end '+str(cigar_t) 
+	cigar_dict = {'I':{'ref_pos':[], 'len':[]}, 'D':{'ref_pos':[]}}
+	cur_ref_pos = read_ref_start
+	for c in cigar_t[ind_start:ind_end+1]:
+		if c[0] == 0:
+			cur_ref_pos += c[1]
+		elif c[0] == 1:
+			if c[1] >= ins_len_thr:
+				cigar_dict['I']['ref_pos'].append(cur_ref_pos)
+				cigar_dict['I']['len'].append(c[1])
+		elif c[0] == 2:
+			if c[1] >= del_len_thr:
+				cigar_dict['D']['ref_pos'].append((cur_ref_pos, cur_ref_pos+c[1]))
+			cur_ref_pos += c[1]
+	assert cur_ref_pos == read_ref_stop, 'something wrong with CIGAR length addition, cur_ref_pos: '+str(cur_ref_pos)+', read_ref_stop: '+str(read_ref_stop)
+	
+	#print('cigar_dict:', cigar_dict)
+	#print('cigar_t[0]:', cigar_t[0])
+	#print('cigar_t[-1]:', cigar_t[-1])
+
+	##### IMPORTANT: if the read is on negative strand, read position starts from the left of CIGAR. CIGAR is always in the positive direction. pysam library doesn't respect this and always sets query_alignment_start to the left S value.
+	if read.is_reverse:
+		if ind_end == len(cigar_t)-1:
+			read_al_start = 0
+		else:
+			read_al_start = cigar_t[ind_end+1][1]
+		read_al_stop = read_al_start + read_al_len
+	#print('read_al_start:', read_al_start)
+	#print('read_al_stop:', read_al_stop)
+
+	### from CIGAR
+	if target_svtype == 'INS':
+		ref_pos_list = cigar_dict['I']['ref_pos']
+		ref_len_list = cigar_dict['I']['len']
+		sum_cigar_len = 0
+		for ind, ref_pos in enumerate(ref_pos_list):
+			if (ref_pos > region_buffer_left) and (ref_pos < region_buffer_right):
+				ref_len = ref_len_list[ind]
+				sum_cigar_len += ref_len
+				if float(abs(ref_len-target_svlen))/float(target_svlen) < len_ratio_tol:
+					CG_read_supp = True
+					CG_read_name = read.query_name
+					break
+		if (not CG_read_supp) and (float(abs(sum_cigar_len-target_svlen))/float(target_svlen) < len_ratio_tol):
+			CG_read_supp = True
+			CG_read_name = read.query_name
+	elif target_svtype == 'DEL':
+		ref_pos_list = cigar_dict['D']['ref_pos']
+		sum_cigar_len = 0
+		for ref_pos_t in ref_pos_list:
+			ref_pos_start = ref_pos_t[0]
+			ref_pos_stop = ref_pos_t[1]
+			if (ref_pos_start > region_buffer_left) and (ref_pos_stop < region_buffer_right):
+				ref_len = ref_pos_stop - ref_pos_start
+				sum_cigar_len += ref_len
+				if float(abs(ref_len-target_svlen))/float(target_svlen) < len_ratio_tol:
+					CG_read_supp = True
+					CG_read_name = read.query_name
+					break
+		if (not CG_read_supp) and (float(abs(sum_cigar_len-target_svlen))/float(target_svlen) < len_ratio_tol):
+			CG_read_supp = True
+			CG_read_name = read.query_name
+	elif target_svtype == 'DUP':
+		ref_pos_list = cigar_dict['I']['ref_pos']
+		ref_len_list = cigar_dict['I']['len']
+		sum_cigar_len = 0
+		for ind, ref_pos in enumerate(ref_pos_list):
+			if ((ref_pos > target_start - 200) and (ref_pos < target_start + 200)) or ((ref_pos > target_stop - 200) and (ref_pos < target_stop + 200)):
+				ref_len = ref_len_list[ind]
+				sum_cigar_len += ref_len
+				if float(abs(ref_len-target_svlen))/float(target_svlen) < len_ratio_tol:
+					CG_read_supp = True
+					CG_read_name = read.query_name
+					break
+		if (not CG_read_supp) and (float(abs(sum_cigar_len-target_svlen))/float(target_svlen) < len_ratio_tol):
+			CG_read_supp = True
+			CG_read_name = read.query_name
+
+	#chr22,36701741,-,1433S4788M248D24S,60,725;	
+	if read.has_tag("SA"):
+		SA_tag = read.get_tag(tag="SA")
+		SA_list = SA_tag.split(';')[:-1]
+		for SA in SA_list:
+			SA = SA.split(',')
+			SA_chrom = SA[0]
+			SA_ref_start = int(SA[1])
+			SA_strand = SA[2]
+			SA_cigar = SA[3]
+			SA_mapq = float(SA[4])
+			#print('SA_chrom:', SA_chrom)
+			#print('SA_strand:', SA_strand)
+			#print('SA_cigar:', SA_cigar)
+			#print('SA_mapq:', SA_mapq)
+
+			#### don't consider SA if:
+			if (SA_mapq < mapping_quality_thr):
+				continue
+			if ((target_svtype == 'DEL') or (target_svtype == 'INS') or (target_svtype == 'DUP')) and (SA_strand != read_strand):
+				continue
+			if (target_svtype == 'TRA') and (SA_chrom == read_chrom):
+				continue
+			if (target_svtype != 'TRA') and (SA_chrom != read_chrom):
+				continue
+			if (target_svtype == 'INV') and (SA_strand == read_strand):
+				continue
+				
+			SA_dict = {'S_left':0, 'S_right':0, 'M':0, 'D':0, 'I':0}
+			c_cur = ''
+			left_S_set = False
+			for c in SA_cigar:
+				if c == 'S':
+					if not left_S_set:
+						SA_dict['S_left'] = int(c_cur)
+						left_S_set = True
+					else:
+						SA_dict['S_right'] = int(c_cur)
+					c_cur = ''
+				elif c == 'M':
+					SA_dict['M'] = int(c_cur)
+					c_cur = ''
+					left_S_set = True
+				elif c == 'D':
+					SA_dict['D'] = int(c_cur)
+					c_cur = ''
+					left_S_set = True
+				elif c == 'I':
+					SA_dict['I'] = int(c_cur)
+					c_cur = ''
+					left_S_set = True
+				else:
+					c_cur += c
+
+			SA_ref_stop = SA_ref_start + SA_dict['M'] + SA_dict['D']
+
+			if (SA_strand == '+'):
+				SA_read_start = SA_dict['S_left']
+				SA_read_stop = SA_read_start + SA_dict['M'] + SA_dict['I']
+			else:
+				SA_read_start = SA_dict['S_right']
+				SA_read_stop = SA_read_start + SA_dict['M'] + SA_dict['I']
+
+			delta_read = 0
+			delta_ref = 0
+			ref_overlap = 0
+			if (read_al_start < SA_read_start):
+				delta_read = SA_read_start - read_al_stop
+				if (read_strand=='+'):
+					delta_ref = SA_ref_start - read_ref_stop
+				else:
+					delta_ref = read_ref_start - SA_ref_stop
+				ref_overlap = -1*delta_ref
+			else:
+				delta_read = read_al_start - SA_read_stop
+				if (read_strand=='+'):
+					delta_ref = read_ref_start - SA_ref_stop
+				else:
+					delta_ref = SA_ref_start - read_ref_stop
+				ref_overlap = -1*delta_ref
+			#print('SA_dict:', SA_dict)
+			#print('SA_ref_start', SA_ref_start)
+			#print('SA_ref_stop', SA_ref_stop)
+			#print('SA_read_start', SA_read_start)
+			#print('SA_read_stop', SA_read_stop)
+			#print('read_ref_start', read_ref_start)
+			#print('read_ref_stop', read_ref_stop)
+			#print('read_al_start', read_al_start)
+			#print('read_al_stop', read_al_stop)
+			#print('delta_ref:', delta_ref)
+			#print('delta_read:', delta_read)
+			#print('ref_overlap:', ref_overlap)
+
+			if target_svtype == 'DEL':
+				sv_len = delta_ref - delta_read
+				if (ref_overlap < 30) and (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol):
+					SA_read_supp = True
+					SA_read_name = read.query_name
+					break
+			elif target_svtype == 'INS':
+				sv_len = delta_read - delta_ref
+				if (ref_overlap < 30) and (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol):
+					SA_read_supp = True
+					SA_read_name = read.query_name
+					break
+			elif target_svtype == 'DUP':
+				sv_len = ref_overlap
+				if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol):
+					SA_read_supp = True
+					SA_read_name = read.query_name
+					#print('set as RV')
+					break
+			elif target_svtype == 'INV':
+				if abs(read_al_start - SA_read_stop) < 70:
+					if read_strand == '+':
+						breakpoint1 = read_ref_start
+						breakpoint2 = SA_ref_start
+					else:
+						breakpoint1 = read_ref_stop
+						breakpoint2 = SA_ref_stop
+					sv_len = abs(breakpoint1 - breakpoint2)
+					if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol):
+						SA_read_supp = True
+						SA_read_name = read.query_name
+						#print('set as RV inv-1')
+						break
+				if abs(read_al_stop - SA_read_start) < 70:
+					if read_strand == '+':
+						breakpoint1 = read_ref_stop
+						breakpoint2 = SA_ref_stop
+					else:
+						breakpoint1 = read_ref_start
+						breakpoint2 = SA_ref_start
+					sv_len = abs(breakpoint1 - breakpoint2)
+					if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol):
+						SA_read_supp = True
+						SA_read_name = read.query_name
+						#print('set as RV inv-2')
+						break
+			elif target_svtype == 'TRA':
+				if (read_chrom == target_sv.chrom) and \
+					(SA_chrom == target_sv.info['CHR2']) and \
+					( (abs(read_ref_stop - target_start) < 100) or (abs(read_ref_start - target_start) < 100) ) and \
+					( (abs(SA_ref_stop - target_stop) < 100) or (abs(SA_ref_start - target_stop) < 100) ):
+					SA_read_supp = True
+					SA_read_name = read.query_name
+					break
+						
+	#print ('locus_read_name:', locus_read_name, 'CG_read_name:', CG_read_name, 'SA_read_name:', SA_read_name)
+	return locus_read_name, CG_read_name, SA_read_name
+
+def get_cigar_dict(read, ins_len_thr, del_len_thr):
+	read_ref_start = read.reference_start
+	read_ref_stop = read.reference_end
+	read_al_start = read.query_alignment_start
+	read_al_stop = read.query_alignment_end
+	cigar_t = read.cigartuples
+	ind_start = -1
+	ind_end = -1
+	for i, c in enumerate(cigar_t):
+		if c[0] != 4:
+			ind_start = i
+			break
+	for i in range(len(cigar_t)-1,-1,-1):
+		c = cigar_t[i]
+		if c[0] != 4:
+			ind_end = i
+			break
+	assert ind_start != -1, 'wrong ind_start '+str(cigar_t)
+	assert ind_end != -1, 'wrong ind_end '+str(cigar_t) 
+	cigar_dict = {'I':{'ref_pos':[], 'len':[], 'seq_pos':[]}, 'D':{'ref_pos':[]}}
+	cur_ref_pos = read_ref_start
+	cur_seq_pos = 0
+	for c in cigar_t[ind_start:ind_end+1]:
+		if c[0] == 0:
+			cur_ref_pos += c[1]
+			cur_seq_pos += c[1]
+		elif c[0] == 1:
+			if c[1] >= ins_len_thr:
+				cigar_dict['I']['ref_pos'].append(cur_ref_pos)
+				cigar_dict['I']['seq_pos'].append((cur_seq_pos, cur_seq_pos+c[1]))
+				cigar_dict['I']['len'].append(c[1])
+			cur_seq_pos += c[1]
+		elif c[0] == 2:
+			if c[1] >= del_len_thr:
+				cigar_dict['D']['ref_pos'].append((cur_ref_pos, cur_ref_pos+c[1]))
+			cur_ref_pos += c[1]
+	assert cur_ref_pos == read_ref_stop, 'something wrong with CIGAR length addition, cur_ref_pos: '+str(cur_ref_pos)+', read_ref_stop: '+str(read_ref_stop)
+	assert cur_seq_pos == read_al_stop-read_al_start, 'something wrong with CIGAR length addition, cur_seq_pos: '+str(cur_seq_pos)+', read_al_stop-read_al_start: '+str(read_al_stop-read_al_start)
+
+	return cigar_dict, ind_start, ind_end
+	
+def get_SA_cigar_dict(SA_cigar):
+	SA_dict = {'S_left':0, 'S_right':0, 'M':0, 'D':0, 'I':0}
+	c_cur = ''
+	left_S_set = False
+	for c in SA_cigar:
+		if c == 'S':
+			if not left_S_set:
+				SA_dict['S_left'] = int(c_cur)
+				left_S_set = True
+			else:
+				SA_dict['S_right'] = int(c_cur)
+			c_cur = ''
+		elif c == 'M':
+			SA_dict['M'] = int(c_cur)
+			c_cur = ''
+			left_S_set = True
+		elif c == 'D':
+			SA_dict['D'] = int(c_cur)
+			c_cur = ''
+			left_S_set = True
+		elif c == 'I':
+			SA_dict['I'] = int(c_cur)
+			c_cur = ''
+			left_S_set = True
+		else:
+			c_cur += c
+
+	return SA_dict
+
+def str_signature(read, target_sv, trf_start_list, trf_end_list, period_len_list, CN_list, period_seq_list, k_s_dict, fa_handle, visited_read_set):
+	
+	#print('+++++++++++ str signature ++++++++++')
+	#print('period_len_list:', period_len_list)
+	#print('CN_list:', CN_list)
+	#print('period_seq_list:', period_seq_list)
+	
+	#print('read.query_alignment_start:')
+	#print(read.query_alignment_start)
+	#print('read.query_alignment_end:')
+	#print(read.query_alignment_end)
+	#print('read.query_alignment_length:')
+	#print(read.query_alignment_length)
+	#print('read.query_length:')
+	#print(read.query_length)
+	#print('len(read.query_sequence):')
+	#print(len(read.query_sequence))
+	#print('len(read.query_alignment_sequence):')
+	#print(len(read.query_alignment_sequence))
+
+	locus_read_name_list = []
+	num_repeat_list = []
+	
+	target_svtype = target_sv.info['SVTYPE']
+	
+	ins_len_thr = 20
+	del_len_thr = 20
+
+	read_chrom = read.reference_name
+	read_ref_start = read.reference_start
+	read_ref_stop = read.reference_end
+
+	cigar_dict, ind_start, ind_end = get_cigar_dict(read, ins_len_thr, del_len_thr)
+	#print('cigar_dict:', cigar_dict)
+
+	if target_svtype == 'DUP':
+		mapping_quality_thr = 20
+		read_al_start = read.query_alignment_start
+		read_al_stop = read.query_alignment_end
+		read_al_len = read.query_alignment_length
+		read_strand = '+'
+		if read.is_reverse:
+			read_strand = '-'
+		cigar_t = read.cigartuples
+		if read.is_reverse:
+			if ind_end == len(cigar_t)-1:
+				read_al_start = 0
+			else:
+				read_al_start = cigar_t[ind_end+1][1]
+			read_al_stop = read_al_start + read_al_len
+		#print('read_al_start:', read_al_start)
+		#print('read_al_stop:', read_al_stop)
+
+	for i_trf in range(len(trf_start_list)):
+
+		trf_start = trf_start_list[i_trf]
+		trf_end = trf_end_list[i_trf]
+		period_len = period_len_list[i_trf]
+		period_seq = period_seq_list[i_trf]
+
+		if ((read_ref_start <= trf_start) and (read_ref_stop >= trf_end)) or (target_svtype == 'DUP'):
+
+			locus_read_name_list.append(read.query_name)
+
+			if target_svtype == 'INS':
+				ins_seq = ''
+				for ind, ref_pos in enumerate(cigar_dict['I']['ref_pos']):
+					if (ref_pos >= trf_start - period_len) and (ref_pos <= trf_end + period_len):
+						seq_start, seq_end = cigar_dict['I']['seq_pos'][ind]
+						ins_seq += read.query_alignment_sequence[seq_start:seq_end]
+				#print('ins_seq:', ins_seq)
+				#print('len(ins_seq):', len(ins_seq))
+				#print('period_seq:', period_seq)
+				if len(ins_seq) > period_len/2:
+					score_ind_list, raw_score_ind_list = AlignmentScore(period_seq, ins_seq, k_s_dict)
+					#print('score_ind_list:', score_ind_list)
+					#print('len(score_ind_list):', len(score_ind_list))
+					#print('raw_score_ind_list:', raw_score_ind_list)
+					num_repeat_list.append(len(score_ind_list))
+				else:
+					num_repeat_list.append(0)
+			elif target_svtype == 'DEL':
+				del_seq = ''
+				for ind, ref_pos_tuple in enumerate(cigar_dict['D']['ref_pos']):
+					ref_pos_start, ref_pos_end = ref_pos_tuple
+					if (ref_pos_start >= trf_start - period_len) and (ref_pos_end <= trf_end + period_len):
+						del_seq += fa_handle.fetch(read_chrom, ref_pos_start, ref_pos_end)
+				#print('del_seq:', del_seq)
+				#print('len(del_seq):', len(del_seq))
+				#print('period_seq:', period_seq)
+				if len(del_seq) > period_len/2:
+					score_ind_list, raw_score_ind_list = AlignmentScore(period_seq, del_seq, k_s_dict)
+					#print('score_ind_list:', score_ind_list)
+					#print('len(score_ind_list):', len(score_ind_list))
+					#print('raw_score_ind_list:', raw_score_ind_list)
+					num_repeat_list.append(len(score_ind_list))
+				else:
+					num_repeat_list.append(0)
+			elif target_svtype == 'DUP':
+				ins_seq = ''
+				for ind, ref_pos in enumerate(cigar_dict['I']['ref_pos']):
+					if (ref_pos >= trf_start - period_len) and (ref_pos <= trf_end + period_len):
+						seq_start, seq_end = cigar_dict['I']['seq_pos'][ind]
+						ins_seq += read.query_alignment_sequence[seq_start:seq_end]
+
+				#print('read.query_name:', read.query_name, 'read.has_tag("SA"):', read.has_tag("SA"))
+				#print('len(ins_seq):', len(ins_seq))
+				if (read.query_name not in visited_read_set) and read.has_tag("SA"):
+					#chr22,36701741,-,1433S4788M248D24S,60,725;	
+					SA_tag = read.get_tag(tag="SA")
+					SA_list = SA_tag.split(';')[:-1]
+					for SA in SA_list:
+						SA = SA.split(',')
+						SA_chrom = SA[0]
+						SA_ref_start = int(SA[1])
+						SA_strand = SA[2]
+						SA_cigar = SA[3]
+						SA_mapq = float(SA[4])
+						#print('SA_chrom:', SA_chrom)
+						#print('SA_strand:', SA_strand)
+						#print('SA_cigar:', SA_cigar)
+						#print('SA_mapq:', SA_mapq)
+
+						#### don't consider SA if:
+						if (SA_mapq < mapping_quality_thr):
+							continue
+						if (SA_strand != read_strand):
+							continue
+						if (SA_chrom != read_chrom):
+							continue
+							
+						SA_dict = get_SA_cigar_dict(SA_cigar)
+
+						SA_ref_stop = SA_ref_start + SA_dict['M'] + SA_dict['D']
+
+						if (SA_strand == '+'):
+							SA_read_start = SA_dict['S_left']
+							SA_read_stop = SA_read_start + SA_dict['M'] + SA_dict['I']
+						else:
+							SA_read_start = SA_dict['S_right']
+							SA_read_stop = SA_read_start + SA_dict['M'] + SA_dict['I']
+
+						if (read_al_start < SA_read_start):
+							delta_read = SA_read_start - read_al_stop
+							if (read_strand=='+'):
+								delta_ref = SA_ref_start - read_ref_stop
+								ref_overlap_start = SA_ref_start
+								ref_overlap_stop = read_ref_stop
+							else:
+								delta_ref = read_ref_start - SA_ref_stop
+								ref_overlap_start = read_ref_start
+								ref_overlap_stop = SA_ref_stop
+							ref_overlap = -1*delta_ref
+						else:
+							delta_read = read_al_start - SA_read_stop
+							if (read_strand=='+'):
+								delta_ref = read_ref_start - SA_ref_stop
+								ref_overlap_start = read_ref_start
+								ref_overlap_stop = SA_ref_stop
+							else:
+								delta_ref = SA_ref_start - read_ref_stop
+								ref_overlap_start = SA_ref_start
+								ref_overlap_stop = read_ref_stop
+							ref_overlap = -1*delta_ref
+						#print('delta_read:', delta_read)
+						#print('delta_ref:', delta_ref)
+						#print('ref_overlap:', ref_overlap)
+						#print('ref_overlap_start:', ref_overlap_start)
+						#print('ref_overlap_stop:', ref_overlap_stop)
+						if (abs(delta_read) < 70) and (ref_overlap > (trf_end - trf_start)/3.):
+							ins_seq += fa_handle.fetch(read_chrom, ref_overlap_start, ref_overlap_stop)
+
+				#print('len(ins_seq):', len(ins_seq))
+				#print('period_seq:', period_seq)
+				#print('ins_seq:', ins_seq)
+				if len(ins_seq) > period_len/2:
+					score_ind_list, raw_score_ind_list = AlignmentScore(period_seq, ins_seq, k_s_dict)
+					#print('score_ind_list:', score_ind_list)
+					#print('len(score_ind_list):', len(score_ind_list))
+					#print('raw_score_ind_list:', raw_score_ind_list)
+					num_repeat_list.append(len(score_ind_list))
+				else:
+					num_repeat_list.append(0)
+			else:
+				assert 1==0, 'wrong svtype: '+target_svtype
+		else:
+			locus_read_name_list.append('')
+			num_repeat_list.append(-1)
+
+	return locus_read_name_list, num_repeat_list
+
