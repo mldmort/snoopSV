@@ -190,7 +190,8 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, verbose=1):
 
 		for i_read, read in enumerate(fh_bam.fetch(chrom, pos_start-region_buffer_length, pos_stop+region_buffer_length)):
 			if (not read.is_secondary) and (read.mapping_quality >= mapping_quality_thr):
-				if STR_bool and (svtype=='INS' or svtype=='DEL' or svtype=='DUP'):
+				#if STR_bool and (svtype=='INS' or svtype=='DEL' or svtype=='DUP'):
+				if STR_bool and (svtype=='INS' or svtype=='DEL'):
 					locus_read_name_list, num_repeat_list = str_signature(read, target_sv, str_start_list, str_end_list, period_len_list, CN_list, period_seq_list, k_s_dict, fa_handle, visited_read_set)
 					visited_read_set.update([read.query_name])
 					for i_str in range(len(str_tar_isecs)):
@@ -204,7 +205,8 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, verbose=1):
 				sample_supp_dict['locus_reads'].update([locus_read])
 				sample_supp_dict['CG_supp'].update([CG_supp])
 				sample_supp_dict['SA_supp'].update([SA_supp])
-		if STR_bool and (svtype=='INS' or svtype=='DEL' or svtype=='DUP'):
+		#if STR_bool and (svtype=='INS' or svtype=='DEL' or svtype=='DUP'):
+		if STR_bool and (svtype=='INS' or svtype=='DEL'):
 			for str_supp_dict in str_supp_dict_list:
 				count_list = list(str_supp_dict.values())
 				str_GT, str_GQ = infer_gt_str(count_list, p_err=0.05, svtype=svtype)

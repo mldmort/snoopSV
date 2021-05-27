@@ -555,7 +555,8 @@ def str_signature(read, target_sv, trf_start_list, trf_end_list, period_len_list
 		period_len = period_len_list[i_trf]
 		period_seq = period_seq_list[i_trf]
 
-		if ((read_ref_start <= trf_start) and (read_ref_stop >= trf_end)) or (target_svtype == 'DUP'):
+		#if ((read_ref_start <= trf_start) and (read_ref_stop >= trf_end)) or (target_svtype == 'DUP'):
+		if ((read_ref_start <= trf_start) and (read_ref_stop >= trf_end)):
 
 			locus_read_name_list.append(read.query_name)
 
