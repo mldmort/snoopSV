@@ -5,7 +5,7 @@ import numpy as np
 import sys
 from math import log10, factorial
 import subprocess
-from genSV import sv_class, infer_gt, infer_gt_str, sv_signiture, str_signature
+from genSV import sv_class, infer_gt_sv, infer_gt_tr, sv_signiture, tr_signature
 
 def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, verbose=1):
 
@@ -14,10 +14,10 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, verbose=1):
 	region_buffer_length = 1000
 	p_err = 0.05
 
-	STR_file_TRF_target = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot_per-2-250.bed'
-	STR_file_TRF_all = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot.bed'
-	STR_file_RM_Simpe = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Repeats_Masker_Simple_repeat.bed'
-	STR_file_MG = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/hg38_ver13.bed'
+	TR_file_TRF_target = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot_per-2-250.bed'
+	TR_file_TRF_all = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot.bed'
+	TR_file_RM_Simpe = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Repeats_Masker_Simple_repeat.bed'
+	TR_file_MG = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/hg38_ver13.bed'
 
 	REF_FILE = '/oasis/scratch/comet/smmortazavi/temp_project/HUMAN_DATA/REF_GENOME/GRCh38_full_analysis_set_plus_decoy_hla.fa'
 	fa_handle = pysam.FastaFile(REF_FILE)
@@ -49,12 +49,12 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, verbose=1):
 		print('i_rec_start:', i_rec_start)
 		print('i_rec_end:', i_rec_end)
 
-	new_header_INFO = ['##INFO=<ID=STR,Number=0,Type=Flag,Description="STR region">',
-	'##INFO=<ID=STR_TRF_OTHER,Number=0,Type=Flag,Description="STR region">',
-	'##INFO=<ID=STR_RM_SR,Number=0,Type=Flag,Description="STR region">',
-	'##INFO=<ID=STR_MG,Number=0,Type=Flag,Description="STR region">',
-	'##INFO=<ID=STR_REPEAT_LEN,Number=.,Type=String,Description="STR repeat length, can have overlaping STRs">',
-	'##INFO=<ID=STR_REPEAT_SEQ,Number=.,Type=String,Description="STR repeat sequence, can have overlaping STRs">'
+	new_header_INFO = ['##INFO=<ID=TR,Number=0,Type=Flag,Description="TR region, target for TR genotyping">',
+	'##INFO=<ID=TR_TRF_OTHER,Number=0,Type=Flag,Description="TR region, in TRF track but not a target for genotyping">',
+	'##INFO=<ID=TR_RM_SR,Number=0,Type=Flag,Description="TR region, in repeat masker track, not a target for genotyping">',
+	'##INFO=<ID=TR_MG,Number=0,Type=Flag,Description="TR region, in Gymreklab targets, but not in TR targets for genotyping">',
+	'##INFO=<ID=TR_REPEAT_LEN,Number=.,Type=String,Description="TR repeat length">',
+	'##INFO=<ID=TR_REPEAT_SEQ,Number=.,Type=String,Description="TR repeat sequence">'
 	]
 	new_header_FORMAT = ['##FORMAT=<ID=RV,Number=1,Type=Integer,Description="Number of reads supporting the variant sequence, from genSV">',
 	'##FORMAT=<ID=RR,Number=1,Type=Integer,Description="Number of reads around the breakpoints supporting the reference sequence, from genSV">',
@@ -63,8 +63,10 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, verbose=1):
 	'##FORMAT=<ID=P_11,Number=1,Type=Float,Description="probability of 1/1 genotype, from genSV">',
 	'##FORMAT=<ID=P_01,Number=1,Type=Float,Description="probability of 0/1 genotype, from genSV">',
 	'##FORMAT=<ID=P_00,Number=1,Type=Float,Description="probability of 0/0 genotype, from genSV">',
-	'##FORMAT=<ID=GT_STR,Number=.,Type=String,Description="Genotype in STR region, from genSV. Shows the number of repeats added or deleted">',
-	'##FORMAT=<ID=GQ_STR,Number=.,Type=String,Description="Phred-scale genotype quality score in STR region, from genSV">'
+	'##FORMAT=<ID=GT_TR_AL,Number=.,Type=String,Description="Genotype in TR region, from genSV">',
+	'##FORMAT=<ID=GQ_TR_AL,Number=.,Type=String,Description="Phred-scale genotype quality score in TR region, from genSV">',
+	'##FORMAT=<ID=GT_TR_LN,Number=.,Type=String,Description="Genotype in TR region, from genSV">',
+	'##FORMAT=<ID=GQ_TR_LN,Number=.,Type=String,Description="Phred-scale genotype quality score in TR region, from genSV">'
 	]
 
 	fh_vcf_in = pysam.VariantFile(vcf_in)
@@ -115,10 +117,10 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, verbose=1):
 
 		this_line = chrom+'\t'+str(pos_start)+'\t'+str(pos_stop)
 		command1 = ('echo -e '+this_line).split(' ')
-		command_tar = 'bedtools intersect -a -'.split(' ') + ('-b '+STR_file_TRF_target+' -f 0.5 -wa -wb').split(' ') 
-		command_all = 'bedtools intersect -a -'.split(' ') + ('-b '+STR_file_TRF_all+' -f 0.5 -wa -wb').split(' ') 
-		command_rms = 'bedtools intersect -a -'.split(' ') + ('-b '+STR_file_RM_Simpe+' -f 0.5 -wa -wb').split(' ') 
-		command_mg = 'bedtools intersect -a -'.split(' ') + ('-b '+STR_file_MG+' -f 0.5 -wa -wb').split(' ') 
+		command_tar = 'bedtools intersect -a -'.split(' ') + ('-b '+TR_file_TRF_target+' -f 0.5 -wa -wb').split(' ') 
+		command_all = 'bedtools intersect -a -'.split(' ') + ('-b '+TR_file_TRF_all+' -f 0.5 -wa -wb').split(' ') 
+		command_rms = 'bedtools intersect -a -'.split(' ') + ('-b '+TR_file_RM_Simpe+' -f 0.5 -wa -wb').split(' ') 
+		command_mg = 'bedtools intersect -a -'.split(' ') + ('-b '+TR_file_MG+' -f 0.5 -wa -wb').split(' ') 
 		#print('command1:', command1)
 		#print('command_tar:', command_tar)
 		#print('command_all:', command_all)
@@ -126,106 +128,104 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, verbose=1):
 		#print('command_mg:', command_mg)
 
 		ps1 = subprocess.Popen(command1, stdout=subprocess.PIPE)
-		str_tar_isecs = subprocess.run(command_tar, stdin=ps1.stdout, check=True, capture_output=True, text=True).stdout
+		tr_tar_isecs = subprocess.run(command_tar, stdin=ps1.stdout, check=True, capture_output=True, text=True).stdout
 		ps1 = subprocess.Popen(command1, stdout=subprocess.PIPE)
-		str_all_isecs = subprocess.run(command_all, stdin=ps1.stdout, check=True, capture_output=True, text=True).stdout
+		tr_all_isecs = subprocess.run(command_all, stdin=ps1.stdout, check=True, capture_output=True, text=True).stdout
 		ps1 = subprocess.Popen(command1, stdout=subprocess.PIPE)
-		str_rms_isecs = subprocess.run(command_rms, stdin=ps1.stdout, check=True, capture_output=True, text=True).stdout
+		tr_rms_isecs = subprocess.run(command_rms, stdin=ps1.stdout, check=True, capture_output=True, text=True).stdout
 		ps1 = subprocess.Popen(command1, stdout=subprocess.PIPE)
-		str_mg_isecs = subprocess.run(command_mg, stdin=ps1.stdout, check=True, capture_output=True, text=True).stdout
-		#print('str_tar_isecs:', str_tar_isecs)
-		#print('str_all_isecs:', str_all_isecs)
-		#print('str_rms_isecs:', str_rms_isecs)
-		#print('str_mg_isecs:', str_mg_isecs)
+		tr_mg_isecs = subprocess.run(command_mg, stdin=ps1.stdout, check=True, capture_output=True, text=True).stdout
+		#print('tr_tar_isecs:', tr_tar_isecs)
+		#print('tr_all_isecs:', tr_all_isecs)
+		#print('tr_rms_isecs:', tr_rms_isecs)
+		#print('tr_mg_isecs:', tr_mg_isecs)
 
-		str_tar_isecs = str_tar_isecs.split('\n')[:-1] # the last one is always an empty string
-		str_all_isecs = str_all_isecs.split('\n')[:-1] # the last one is always an empty string
-		str_rms_isecs = str_rms_isecs.split('\n')[:-1] # the last one is always an empty string
-		str_mg_isecs = str_mg_isecs.split('\n')[:-1] # the last one is always an empty string
-		#print('str_tar_isecs:', str_tar_isecs)
-		#print('str_all_isecs:', str_all_isecs)
-		#print('str_rms_isecs:', str_rms_isecs)
-		#print('str_mg_isecs:', str_mg_isecs)
+		tr_tar_isecs = tr_tar_isecs.split('\n')[:-1] # the last one is always an empty string
+		tr_all_isecs = tr_all_isecs.split('\n')[:-1] # the last one is always an empty string
+		tr_rms_isecs = tr_rms_isecs.split('\n')[:-1] # the last one is always an empty string
+		tr_mg_isecs = tr_mg_isecs.split('\n')[:-1] # the last one is always an empty string
+		#print('tr_tar_isecs:', tr_tar_isecs)
+		#print('tr_all_isecs:', tr_all_isecs)
+		#print('tr_rms_isecs:', tr_rms_isecs)
+		#print('tr_mg_isecs:', tr_mg_isecs)
 
-		if len(str_tar_isecs)>0:
-			STR_bool = True
-			str_start_list = []
-			str_end_list = []
+		if len(tr_tar_isecs)>0:
+			TR_bool = True
+			tr_start_list = []
+			tr_end_list = []
 			period_len_list = []
 			CN_list = []
 			period_seq_list = []
-			for str_isec in str_tar_isecs:
-				_, _, _, str_isec_chrom, str_isec_start, str_isec_end, period_len, CN, period_seq = str_isec.split('\t')
-				str_start_list.append(int(str_isec_start))
-				str_end_list.append(int(str_isec_end))
+			for tr_isec in tr_tar_isecs:
+				_, _, _, tr_isec_chrom, tr_isec_start, tr_isec_end, period_len, CN, period_seq = tr_isec.split('\t')
+				tr_start_list.append(int(tr_isec_start))
+				tr_end_list.append(int(tr_isec_end))
 				period_len_list.append(int(period_len))
 				CN_list.append(float(CN))
 				period_seq_list.append(period_seq)
-			#print('str_start_list:', str_start_list)
-			#print('str_end_list:', str_end_list)
+			#print('tr_start_list:', tr_start_list)
+			#print('tr_end_list:', tr_end_list)
 			#print('period_len_list:', period_len_list)
 			#print('CN_list:', CN_list)
 			#print('period_seq_list:', period_seq_list)
-			
 		else:
-			STR_bool = False
+			TR_bool = False
 
-		rec.info['STR'] = STR_bool
-		if STR_bool:
-			rec.info['STR_REPEAT_LEN'] = ','.join([str(x) for x in period_len_list])
-			rec.info['STR_REPEAT_SEQ'] = ','.join([str(x) for x in period_seq_list])
-		if not STR_bool:
-			if len(str_all_isecs)>0:
-				rec.info['STR_TRF_OTHER'] = True
-			if len(str_rms_isecs)>0:
-				rec.info['STR_RM_SR'] = True
-			if len(str_mg_isecs)>0:
-				rec.info['STR_MG'] = True
+		rec.info['TR'] = TR_bool
+		if TR_bool:
+			rec.info['TR_REPEAT_LEN'] = ','.join([str(x) for x in period_len_list])
+			rec.info['TR_REPEAT_SEQ'] = ','.join([str(x) for x in period_seq_list])
+		if not TR_bool:
+			if len(tr_all_isecs)>0:
+				rec.info['TR_TRF_OTHER'] = True
+			if len(tr_rms_isecs)>0:
+				rec.info['TR_RM_SR'] = True
+			if len(tr_mg_isecs)>0:
+				rec.info['TR_MG'] = True
 
 		sample_supp_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()}
 		visited_read_set = set()
-		str_supp_dict_list = [{} for i in range(len(str_tar_isecs))]
-		str_GT_list = []
-		str_GQ_list = []
+		tr_supp_al_list = [[] for i in range(len(tr_tar_isecs))]
+		tr_supp_ln_list = [[] for i in range(len(tr_tar_isecs))]
+		tr_GT_al_list = []
+		tr_GT_ln_list = []
+		tr_GQ_al_list = []
+		tr_GQ_ln_list = []
 
 		for i_read, read in enumerate(fh_bam.fetch(chrom, pos_start-region_buffer_length, pos_stop+region_buffer_length)):
 			if (not read.is_secondary) and (read.mapping_quality >= mapping_quality_thr):
-				#if STR_bool and (svtype=='INS' or svtype=='DEL' or svtype=='DUP'):
-				if STR_bool and (svtype=='INS' or svtype=='DEL'):
-					locus_read_name_list, num_repeat_list = str_signature(read, target_sv, str_start_list, str_end_list, period_len_list, CN_list, period_seq_list, k_s_dict, fa_handle, visited_read_set)
+				if TR_bool and (svtype=='INS' or svtype=='DEL'):
+					locus_read_name_list, num_repeat_al_list, num_repeat_ln_list = tr_signature(read, target_sv, tr_start_list, tr_end_list, period_len_list, CN_list, period_seq_list, k_s_dict, fa_handle, visited_read_set)
 					visited_read_set.update([read.query_name])
-					for i_str in range(len(str_tar_isecs)):
-						if num_repeat_list[i_str] >= 0:
-							read_name = locus_read_name_list[i_str]
-							if read_name in str_supp_dict_list[i_str]:
-								str_supp_dict_list[i_str][read_name] += num_repeat_list[i_str]
-							else:
-								str_supp_dict_list[i_str][read_name] = num_repeat_list[i_str]
+					for i_tr in range(len(tr_tar_isecs)):
+						if num_repeat_al_list[i_tr] >= 0:
+							tr_supp_al_list[i_tr].append(num_repeat_al_list[i_tr])
+						if num_repeat_ln_list[i_tr] >= 0:
+							tr_supp_ln_list[i_tr].append(num_repeat_ln_list[i_tr])
 				locus_read, CG_supp, SA_supp = sv_signiture(read, target_sv)
 				sample_supp_dict['locus_reads'].update([locus_read])
 				sample_supp_dict['CG_supp'].update([CG_supp])
 				sample_supp_dict['SA_supp'].update([SA_supp])
-		#if STR_bool and (svtype=='INS' or svtype=='DEL' or svtype=='DUP'):
-		if STR_bool and (svtype=='INS' or svtype=='DEL'):
-			for str_supp_dict in str_supp_dict_list:
-				count_list = list(str_supp_dict.values())
-				str_GT, str_GQ = infer_gt_str(count_list, p_err=0.05, svtype=svtype)
-				str_GT_list.append(str_GT)
-				str_GQ_list.append(str_GQ)
-			rec.samples[0]['GT_STR'] = ','.join(str_GT_list)
-			rec.samples[0]['GQ_STR'] = ','.join([str(x) for x in str_GQ_list])
-			#print('str_num_repeats:', str_num_repeats)
-			#print('[list(x.values()) for x in str_supp_dict_list]:')
-			#print([list(x.values()) for x in str_supp_dict_list])
-			#print('str_GT_list:', str_GT_list)
-			#print('str_GQ_list:', str_GQ_list)
+		if TR_bool and (svtype=='INS' or svtype=='DEL'):
+			for count_list in tr_supp_al_list:
+				tr_GT, tr_GQ = infer_gt_tr(count_list, p_err=0.05, svtype=svtype)
+				tr_GT_al_list.append(tr_GT)
+				tr_GQ_al_list.append(tr_GQ)
+			for count_list in tr_supp_ln_list:
+				tr_GT, tr_GQ = infer_gt_tr(count_list, p_err=0.05, svtype=svtype)
+				tr_GT_ln_list.append(tr_GT)
+				tr_GQ_ln_list.append(tr_GQ)
+			rec.samples[0]['GT_TR_AL'] = ','.join(tr_GT_al_list)
+			rec.samples[0]['GQ_TR_AL'] = ','.join([str(x) for x in tr_GQ_al_list])
+			rec.samples[0]['GT_TR_LN'] = ','.join(tr_GT_ln_list)
+			rec.samples[0]['GQ_TR_LN'] = ','.join([str(x) for x in tr_GQ_ln_list])
 		sample_supp_dict['locus_reads'] -= {''}
 		sample_supp_dict['CG_supp'] -= {''}
 		sample_supp_dict['SA_supp'] -= {''}
 		DV_s = len(sample_supp_dict['CG_supp'] | sample_supp_dict['SA_supp'])
 		DR_s = len(sample_supp_dict['locus_reads']) - DV_s
 		assert DR_s >= 0, 'problem with DR/DV, DR: '+str(DR_s)+', DV: '+str(DV_s)+', sv_id: '+str(sv_id)
-		GT, GQ, p_11, p_01, p_00 = infer_gt(DR_s, DV_s, p_err)
+		GT, GQ, p_11, p_01, p_00 = infer_gt_sv(DR_s, DV_s, p_err)
 		rec.samples[0]['RV'] = DV_s
 		rec.samples[0]['RR'] = DR_s
 		rec.samples[0]['GT_SV'] = GT
