@@ -314,6 +314,12 @@ def sv_signiture(read, target_sv):
 	if read.is_reverse:
 		read_strand = '-'
 
+	#print('target_start:', target_start)
+	#print('target_stop:', target_stop)
+	#print('read_ref_start:', read_ref_start)
+	#print('read_ref_stop:', read_ref_stop)
+	#print('read_strand:', read_strand)
+
 	### 100 is an arbitrary length
 	if (target_start - 100 > read_ref_start) and (target_start - 100 < read_ref_stop):
 		locus_read = True
@@ -348,36 +354,8 @@ def sv_signiture(read, target_sv):
 
 	cigar_dict, ind_start, ind_end = get_cigar_dict(read, ins_len_thr, del_len_thr)
 
-	#**cigar_t = read.cigartuples
-	#**ind_start = -1
-	#**ind_end = -1
-	#**for i, c in enumerate(cigar_t):
-	#**	if c[0] != 4:
-	#**		ind_start = i
-	#**		break
-	#**for i in range(len(cigar_t)-1,-1,-1):
-	#**	c = cigar_t[i]
-	#**	if c[0] != 4:
-	#**		ind_end = i
-	#**		break
-	#**assert ind_start != -1, 'wrong ind_start '+str(cigar_t)
-	#**assert ind_end != -1, 'wrong ind_end '+str(cigar_t) 
-	#**cigar_dict = {'I':{'ref_pos':[], 'len':[]}, 'D':{'ref_pos':[]}}
-	#**cur_ref_pos = read_ref_start
-	#**for c in cigar_t[ind_start:ind_end+1]:
-	#**	if c[0] == 0:
-	#**		cur_ref_pos += c[1]
-	#**	elif c[0] == 1:
-	#**		if c[1] >= ins_len_thr:
-	#**			cigar_dict['I']['ref_pos'].append(cur_ref_pos)
-	#**			cigar_dict['I']['len'].append(c[1])
-	#**	elif c[0] == 2:
-	#**		if c[1] >= del_len_thr:
-	#**			cigar_dict['D']['ref_pos'].append((cur_ref_pos, cur_ref_pos+c[1]))
-	#**		cur_ref_pos += c[1]
-	#**assert cur_ref_pos == read_ref_stop, 'something wrong with CIGAR length addition, cur_ref_pos: '+str(cur_ref_pos)+', read_ref_stop: '+str(read_ref_stop)
-	
 	#print('cigar_dict:', cigar_dict)
+	#cigar_t = read.cigartuples
 	#print('cigar_t[0]:', cigar_t[0])
 	#print('cigar_t[-1]:', cigar_t[-1])
 
@@ -441,6 +419,8 @@ def sv_signiture(read, target_sv):
 			CG_read_name = read.query_name
 
 	#chr22,36701741,-,1433S4788M248D24S,60,725;	
+	SA_next_right = {'SA_ref_start':-1, 'SA_ref_stop':-1, 'SA_read_start':1e15, 'SA_read_stop':1e15}
+	SA_next_left = {'SA_ref_start':-1, 'SA_ref_stop':-1, 'SA_read_start':-1, 'SA_read_stop':-1}
 	if read.has_tag("SA"):
 		SA_tag = read.get_tag(tag="SA")
 		SA_list = SA_tag.split(';')[:-1]
@@ -553,32 +533,16 @@ def sv_signiture(read, target_sv):
 					#print('set as RV')
 					break
 			elif target_svtype == 'INV':
-				if abs(read_al_start - SA_read_stop) < 70:
-					if read_strand == '+':
-						breakpoint1 = read_ref_start
-						breakpoint2 = SA_ref_start
-					else:
-						breakpoint1 = read_ref_stop
-						breakpoint2 = SA_ref_stop
-					sv_len = abs(breakpoint1 - breakpoint2)
-					if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol):
-						SA_read_supp = True
-						SA_read_name = read.query_name
-						#print('set as RV inv-1')
-						break
-				if abs(read_al_stop - SA_read_start) < 70:
-					if read_strand == '+':
-						breakpoint1 = read_ref_stop
-						breakpoint2 = SA_ref_stop
-					else:
-						breakpoint1 = read_ref_start
-						breakpoint2 = SA_ref_start
-					sv_len = abs(breakpoint1 - breakpoint2)
-					if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol):
-						SA_read_supp = True
-						SA_read_name = read.query_name
-						#print('set as RV inv-2')
-						break
+				if (SA_read_start > read_al_start) and (SA_read_start < SA_next_right['SA_read_start']): # SA is right of read
+					SA_next_right['SA_read_start'] = SA_read_start
+					SA_next_right['SA_read_stop'] = SA_read_stop
+					SA_next_right['SA_ref_start'] = SA_ref_start
+					SA_next_right['SA_ref_stop'] = SA_ref_stop
+				if (SA_read_start < read_al_start) and (SA_read_start > SA_next_left['SA_read_start']): # SA is left of read
+					SA_next_left['SA_read_start'] = SA_read_start
+					SA_next_left['SA_read_stop'] = SA_read_stop
+					SA_next_left['SA_ref_start'] = SA_ref_start
+					SA_next_left['SA_ref_stop'] = SA_ref_stop
 			elif target_svtype == 'TRA':
 				if (read_chrom == target_sv.chrom) and \
 					(SA_chrom == target_sv.info['CHR2']) and \
@@ -588,6 +552,43 @@ def sv_signiture(read, target_sv):
 					SA_read_name = read.query_name
 					break
 						
+	if target_svtype == 'INV':
+		### read has a right SA
+		if (SA_next_right['SA_ref_start'] != -1):
+			if read_strand == '+':
+				breakpoint1 = read_ref_stop
+				breakpoint2 = SA_next_right['SA_ref_stop']
+			else:
+				breakpoint1 = read_ref_start
+				breakpoint2 = SA_next_right['SA_ref_start']
+			min_bp_right = min(breakpoint1, breakpoint2)
+			max_bp_right = max(breakpoint1, breakpoint2)
+		else:
+			min_bp_right = -1
+			max_bp_right = 1e15
+		### read has a left SA
+		if (SA_next_left['SA_ref_start'] != -1):
+			if read_strand == '+':
+				breakpoint1 = read_ref_start
+				breakpoint2 = SA_next_left['SA_ref_start']
+			else:
+				breakpoint1 = read_ref_stop
+				breakpoint2 = SA_next_left['SA_ref_stop']
+			min_bp_left = min(breakpoint1, breakpoint2)
+			max_bp_left = max(breakpoint1, breakpoint2)
+		else:
+			min_bp_left = -1
+			max_bp_left = 1e15
+		
+		bp_1 = max(min_bp_right, min_bp_left)
+		bp_2 = min(max_bp_right, max_bp_left)
+		if bp_1 != -1:
+			sv_len = abs(bp_2 - bp_1)
+			if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol):
+				SA_read_supp = True
+				SA_read_name = read.query_name
+				#print('set as RV inv')
+		
 	#print ('locus_read_name:', locus_read_name, 'CG_read_name:', CG_read_name, 'SA_read_name:', SA_read_name)
 	return locus_read_name, CG_read_name, SA_read_name
 
