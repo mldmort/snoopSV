@@ -7,12 +7,12 @@ from math import log10, factorial
 import subprocess
 from genSV import sv_class, infer_gt_sv, infer_gt_tr, sv_signiture, tr_signature
 
-def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, verbose=1):
+def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, tr_span_max, verbose=1):
 
 	### genotyping setting
 	mapping_quality_thr = 20
 	region_buffer_length = 1000
-	p_err = 0.05
+	SV_p_err = 0.01
 
 	TR_file_TRF_target = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot_per-2-250.bed'
 	TR_file_TRF_all = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot.bed'
@@ -60,6 +60,7 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, verbose=1):
 	'##FORMAT=<ID=RR,Number=1,Type=Integer,Description="Number of reads around the breakpoints supporting the reference sequence, from genSV">',
 	'##FORMAT=<ID=GT_SV,Number=1,Type=String,Description="Genotype of the variant, from genSV">',
 	'##FORMAT=<ID=GQ_SV,Number=1,Type=Integer,Description="Phred-scale genotype quality score, from genSV">',
+	'##FORMAT=<ID=SQ_SV,Number=1,Type=Integer,Description="Phred-scale sample quality score, from genSV">',
 	'##FORMAT=<ID=P_11,Number=1,Type=Float,Description="probability of 1/1 genotype, from genSV">',
 	'##FORMAT=<ID=P_01,Number=1,Type=Float,Description="probability of 0/1 genotype, from genSV">',
 	'##FORMAT=<ID=P_00,Number=1,Type=Float,Description="probability of 0/0 genotype, from genSV">',
@@ -90,9 +91,18 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, verbose=1):
 		start = rec.start
 		stop = rec.stop
 
+		#if svtype == 'INV':
+		#	region_buffer_length = max(region_buffer_length, svlen/10.)
+
 		chr1_region_1=143150000
 		chr1_region_2=149900000
 		if (chrom=='chr1') and ((start > chr1_region_1) and (start < chr1_region_2)) and ((stop > chr1_region_1) and (stop < chr1_region_2)):
+			count_skip_region += 1
+			continue
+
+		chr16_region_1=46380000
+		chr16_region_2=46425000
+		if (chrom=='chr16') and ((start > chr16_region_1) and (start < chr16_region_2)) and ((stop > chr16_region_1) and (stop < chr16_region_2)):
 			count_skip_region += 1
 			continue
 		#print('svtype:', svtype)
@@ -140,7 +150,13 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, verbose=1):
 		#print('tr_rms_isecs:', tr_rms_isecs)
 		#print('tr_mg_isecs:', tr_mg_isecs)
 
-		tr_tar_isecs = tr_tar_isecs.split('\n')[:-1] # the last one is always an empty string
+		#tr_tar_isecs = tr_tar_isecs.split('\n')[:-1] # the last one is always an empty string
+		tr_tar_choose = []
+		for tr_isec in tr_tar_isecs.split('\n')[:-1]:
+			_, _, _, tr_isec_chrom, tr_isec_start, tr_isec_end, period_len, CN, period_seq = tr_isec.split('\t')
+			if ((int(tr_isec_end) - int(tr_isec_start)) < tr_span_max):
+				tr_tar_choose.append(tr_isec)
+		tr_tar_isecs = tr_tar_choose
 		tr_all_isecs = tr_all_isecs.split('\n')[:-1] # the last one is always an empty string
 		tr_rms_isecs = tr_rms_isecs.split('\n')[:-1] # the last one is always an empty string
 		tr_mg_isecs = tr_mg_isecs.split('\n')[:-1] # the last one is always an empty string
@@ -192,7 +208,7 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, verbose=1):
 		tr_GQ_al_list = []
 		tr_GQ_ln_list = []
 
-		for i_read, read in enumerate(fh_bam.fetch(chrom, pos_start-region_buffer_length, pos_stop+region_buffer_length)):
+		for i_read, read in enumerate(fh_bam.fetch(chrom, max(0,pos_start-region_buffer_length), pos_stop+region_buffer_length)):
 			if (not read.is_secondary) and (read.mapping_quality >= mapping_quality_thr):
 				if TR_bool and (svtype=='INS' or svtype=='DEL'):
 					locus_read_name_list, num_repeat_al_list, num_repeat_ln_list = tr_signature(read, target_sv, tr_start_list, tr_end_list, period_len_list, CN_list, period_seq_list, k_s_dict, fa_handle, visited_read_set)
@@ -225,7 +241,7 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, verbose=1):
 		DV_s = len(sample_supp_dict['CG_supp'] | sample_supp_dict['SA_supp'])
 		DR_s = len(sample_supp_dict['locus_reads']) - DV_s
 		assert DR_s >= 0, 'problem with DR/DV, DR: '+str(DR_s)+', DV: '+str(DV_s)+', sv_id: '+str(sv_id)
-		GT, GQ, p_11, p_01, p_00 = infer_gt_sv(DR_s, DV_s, p_err)
+		GT, GQ, p_11, p_01, p_00, SQ = infer_gt_sv(DR_s, DV_s, p_err=SV_p_err)
 		rec.samples[0]['RV'] = DV_s
 		rec.samples[0]['RR'] = DR_s
 		rec.samples[0]['GT_SV'] = GT
@@ -233,6 +249,7 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, verbose=1):
 		rec.samples[0]['P_11'] = p_11
 		rec.samples[0]['P_01'] = p_01
 		rec.samples[0]['P_00'] = p_00
+		rec.samples[0]['SQ_SV'] = SQ
 		#print('DV_s:', DV_s, 'DR_s:', DR_s, 'GT:', GT, 'GQ:', GQ, 'p_00:', p_00, 'p_01:', p_01, 'p_11:', p_11)
 
 		fh_vcf_out.write(rec)
@@ -261,4 +278,5 @@ if __name__ == '__main__':
 	n_sec = int(arglist[5])
 	i_sec = int(arglist[6])
 
-	make_VCF_GT(vcf_in, vcf_out, contig=chrom, bam_file=bam_file, n_sec=n_sec, i_sec=i_sec, verbose=1)
+	tr_span_max = 10000
+	make_VCF_GT(vcf_in, vcf_out, contig=chrom, bam_file=bam_file, n_sec=n_sec, i_sec=i_sec, tr_span_max=tr_span_max, verbose=1)

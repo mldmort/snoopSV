@@ -38,7 +38,7 @@ def infer_gt_sv(DR, DV, p_err):
 	p_G = 1./3.
 	p_D = (p_D_00 + p_D_01 + p_D_11)*p_G
 	if p_D == 0:
-		return './.', 0, 0, 0, 0
+		return './.', 0, 0, 0, 0, 0
 		#print('p_D_00:', p_D_00)
 		#print('p_D_01:', p_D_01)
 		#print('p_D_11:', p_D_11)
@@ -51,8 +51,9 @@ def infer_gt_sv(DR, DV, p_err):
 	probs = [(p_01_D, '0/1', 1), (p_11_D, '1/1', 2), (p_00_D, '0/0', 0)]
 	probs_sorted = sorted(probs, key=lambda x: x[0], reverse=True)
 	GQ = round(-10.*log10(max(1. - probs_sorted[0][0], 1e-100)))
+	SQ = round(-10.*log10(max(p_00_D, 1e-100)))
 
-	return probs_sorted[0][1], GQ, p_11_D, p_01_D, p_00_D
+	return probs_sorted[0][1], GQ, p_11_D, p_01_D, p_00_D, SQ
 
 def infer_gt_tr(count_list, p_err, svtype):
 	if len(count_list) == 0:
@@ -295,8 +296,6 @@ def sv_signiture(read, target_sv):
 	### settings:
 	mapping_quality_thr = 20
 	d_max = 500
-	#region_buffer_left = target_start - min(target_svlen, d_max)
-	#region_buffer_right = target_stop + min(target_svlen, d_max)
 	region_buffer_left = target_start - d_max
 	region_buffer_right = target_stop + d_max
 	len_ratio_tol = 0.25
@@ -314,6 +313,7 @@ def sv_signiture(read, target_sv):
 	if read.is_reverse:
 		read_strand = '-'
 
+	#print('++++++++++++++++++++++++++++++')
 	#print('target_start:', target_start)
 	#print('target_stop:', target_stop)
 	#print('read_ref_start:', read_ref_start)
@@ -321,16 +321,17 @@ def sv_signiture(read, target_sv):
 	#print('read_strand:', read_strand)
 
 	### 100 is an arbitrary length
-	if (target_start - 100 > read_ref_start) and (target_start - 100 < read_ref_stop):
+	locus_region_len = 100
+	if (target_start - locus_region_len > read_ref_start) and (target_start - locus_region_len < read_ref_stop):
 		locus_read = True
 		locus_read_name = read.query_name
-	elif (target_start + 100 > read_ref_start) and (target_start + 100 < read_ref_stop):
+	elif (target_start + locus_region_len > read_ref_start) and (target_start + locus_region_len < read_ref_stop):
 		locus_read = True
 		locus_read_name = read.query_name
-	elif (target_stop - 100 > read_ref_start) and (target_stop - 100 < read_ref_stop):
+	elif (target_stop - locus_region_len > read_ref_start) and (target_stop - locus_region_len < read_ref_stop):
 		locus_read = True
 		locus_read_name = read.query_name
-	elif (target_stop + 100 > read_ref_start) and (target_stop + 100 < read_ref_stop):
+	elif (target_stop + locus_region_len > read_ref_start) and (target_stop + locus_region_len < read_ref_stop):
 		locus_read = True
 		locus_read_name = read.query_name
 
@@ -367,8 +368,6 @@ def sv_signiture(read, target_sv):
 		else:
 			read_al_start = cigar_t[ind_end+1][1]
 		read_al_stop = read_al_start + read_al_len
-	#print('read_al_start:', read_al_start)
-	#print('read_al_stop:', read_al_stop)
 
 	### from CIGAR
 	if target_svtype == 'INS':
@@ -402,21 +401,6 @@ def sv_signiture(read, target_sv):
 		if (not CG_read_supp) and (float(abs(sum_cigar_len-target_svlen))/float(target_svlen) < len_ratio_tol):
 			CG_read_supp = True
 			CG_read_name = read.query_name
-	elif target_svtype == 'DUP':
-		ref_pos_list = cigar_dict['I']['ref_pos']
-		ref_len_list = cigar_dict['I']['len']
-		sum_cigar_len = 0
-		for ind, ref_pos in enumerate(ref_pos_list):
-			if ((ref_pos > target_start - 200) and (ref_pos < target_start + 200)) or ((ref_pos > target_stop - 200) and (ref_pos < target_stop + 200)):
-				ref_len = ref_len_list[ind]
-				sum_cigar_len += ref_len
-				if float(abs(ref_len-target_svlen))/float(target_svlen) < len_ratio_tol:
-					CG_read_supp = True
-					CG_read_name = read.query_name
-					break
-		if (not CG_read_supp) and (float(abs(sum_cigar_len-target_svlen))/float(target_svlen) < len_ratio_tol):
-			CG_read_supp = True
-			CG_read_name = read.query_name
 
 	#chr22,36701741,-,1433S4788M248D24S,60,725;	
 	SA_next_right = {'SA_ref_start':-1, 'SA_ref_stop':-1, 'SA_read_start':1e15, 'SA_read_stop':1e15}
@@ -439,7 +423,7 @@ def sv_signiture(read, target_sv):
 			#### don't consider SA if:
 			if (SA_mapq < mapping_quality_thr):
 				continue
-			if ((target_svtype == 'DEL') or (target_svtype == 'INS') or (target_svtype == 'DUP')) and (SA_strand != read_strand):
+			if ((target_svtype == 'DEL') or (target_svtype == 'INS')) and (SA_strand != read_strand):
 				continue
 			if (target_svtype == 'TRA') and (SA_chrom == read_chrom):
 				continue
@@ -483,23 +467,39 @@ def sv_signiture(read, target_sv):
 				SA_read_start = SA_dict['S_right']
 				SA_read_stop = SA_read_start + SA_dict['M'] + SA_dict['I']
 
-			delta_read = 0
-			delta_ref = 0
-			ref_overlap = 0
 			if (read_al_start < SA_read_start):
 				delta_read = SA_read_start - read_al_stop
-				if (read_strand=='+'):
+				if (read_strand=='+') and (SA_strand == '+'):
 					delta_ref = SA_ref_start - read_ref_stop
-				else:
+					ref_overlap = -1*delta_ref
+					bp1_overlap = SA_ref_start
+					bp2_overlap = read_ref_stop
+				elif (read_strand=='-') and (SA_strand == '-'):
 					delta_ref = read_ref_start - SA_ref_stop
-				ref_overlap = -1*delta_ref
+					ref_overlap = -1*delta_ref
+					bp1_overlap = read_ref_start
+					bp2_overlap = SA_ref_stop
+				else:
+					ref_overlap = min(read_ref_stop, SA_ref_stop) - max(read_ref_start, SA_ref_start)
+					bp1_overlap = max(read_ref_start, SA_ref_start)
+					bp2_overlap = min(read_ref_stop, SA_ref_stop)
 			else:
 				delta_read = read_al_start - SA_read_stop
-				if (read_strand=='+'):
+				if (read_strand=='+') and (SA_strand == '+'):
 					delta_ref = read_ref_start - SA_ref_stop
-				else:
+					ref_overlap = -1*delta_ref
+					bp1_overlap = read_ref_start
+					bp2_overlap = SA_ref_stop
+				elif (read_strand=='-') and (SA_strand == '-'):
 					delta_ref = SA_ref_start - read_ref_stop
-				ref_overlap = -1*delta_ref
+					ref_overlap = -1*delta_ref
+					bp1_overlap = SA_ref_start
+					bp2_overlap = read_ref_stop
+				else:
+					ref_overlap = min(read_ref_stop, SA_ref_stop) - max(read_ref_start, SA_ref_start)
+					bp1_overlap = max(read_ref_start, SA_ref_start)
+					bp2_overlap = min(read_ref_stop, SA_ref_stop)
+					
 			#print('SA_dict:', SA_dict)
 			#print('SA_ref_start', SA_ref_start)
 			#print('SA_ref_stop', SA_ref_stop)
@@ -527,10 +527,11 @@ def sv_signiture(read, target_sv):
 					break
 			elif target_svtype == 'DUP':
 				sv_len = ref_overlap
-				if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol):
+				if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol) and \
+					(   (float(abs(target_start - bp1_overlap))/float(target_svlen) < len_ratio_tol) or \
+						(float(abs(target_stop - bp2_overlap))/float(target_svlen) < len_ratio_tol) ):
 					SA_read_supp = True
 					SA_read_name = read.query_name
-					#print('set as RV')
 					break
 			elif target_svtype == 'INV':
 				if (SA_read_start > read_al_start) and (SA_read_start < SA_next_right['SA_read_start']): # SA is right of read
@@ -553,6 +554,8 @@ def sv_signiture(read, target_sv):
 					break
 						
 	if target_svtype == 'INV':
+		#print('SA_next_right:', SA_next_right)
+		#print('SA_next_left:', SA_next_left)
 		### read has a right SA
 		if (SA_next_right['SA_ref_start'] != -1):
 			if read_strand == '+':
@@ -582,12 +585,12 @@ def sv_signiture(read, target_sv):
 		
 		bp_1 = max(min_bp_right, min_bp_left)
 		bp_2 = min(max_bp_right, max_bp_left)
+		#print('bp_1:', bp_1, 'bp_2:', bp_2)
 		if bp_1 != -1:
 			sv_len = abs(bp_2 - bp_1)
 			if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol):
 				SA_read_supp = True
 				SA_read_name = read.query_name
-				#print('set as RV inv')
 		
 	#print ('locus_read_name:', locus_read_name, 'CG_read_name:', CG_read_name, 'SA_read_name:', SA_read_name)
 	return locus_read_name, CG_read_name, SA_read_name
