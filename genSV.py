@@ -595,7 +595,7 @@ def sv_signiture(read, target_sv):
 	#print ('locus_read_name:', locus_read_name, 'CG_read_name:', CG_read_name, 'SA_read_name:', SA_read_name)
 	return locus_read_name, CG_read_name, SA_read_name
 
-def tr_signature(read, target_sv, tr_start_list, tr_end_list, period_len_list, CN_list, period_seq_list, k_s_dict, fa_handle, visited_read_set):
+def tr_signature(read, target_sv, tr_start_list, tr_end_list, period_len_list, CN_list, period_seq_list, k_s_dict, fa_handle, visited_read_set_list):
 	
 	#print('+++++++++++ str signature ++++++++++')
 	#print('period_len_list:', period_len_list)
@@ -615,6 +615,7 @@ def tr_signature(read, target_sv, tr_start_list, tr_end_list, period_len_list, C
 	locus_read_name_list = []
 	num_repeat_align_list = []
 	num_repeat_length_list = []
+	num_bp_list = []
 	
 	read_chrom = read.reference_name
 	read_ref_start = read.reference_start
@@ -627,6 +628,7 @@ def tr_signature(read, target_sv, tr_start_list, tr_end_list, period_len_list, C
 		period_len = period_len_list[i_tr]
 		period_seq = period_seq_list[i_tr]
 		flanking_bp = period_len
+		visited_read_set = visited_read_set_list[i_tr]
 		#print('tr_start:', tr_start)
 		#print('tr_end:', tr_end)
 		#print('period_len:', period_len)
@@ -636,20 +638,22 @@ def tr_signature(read, target_sv, tr_start_list, tr_end_list, period_len_list, C
 
 			locus_read_name_list.append(read.query_name)
 
-			read_seq_tr = get_seq_segment(read, tr_start, tr_end, flanking_bp) ### tr_start and stop are 0-based
+			read_seq_tr = get_seq_segment(read, tr_start-flanking_bp, tr_end+flanking_bp) ### tr_start and stop are 0-based
 			score_ind_list, raw_score_ind_list = AlignmentScore(period_seq, read_seq_tr, k_s_dict)
 			num_repeat_align = len(score_ind_list)
 			num_repeat_length = int(round((len(read_seq_tr)-2.*flanking_bp)/period_len))
 			num_repeat_align_list.append(num_repeat_align)
 			num_repeat_length_list.append(num_repeat_length)
+			num_bp_list.append(len(read_seq_tr)-2*flanking_bp)
 			#print(read_seq_tr, num_repeat_align, num_repeat_length, read.query_name)
 
 		else:
 			locus_read_name_list.append('')
 			num_repeat_align_list.append(-1)
 			num_repeat_length_list.append(-1)
+			num_bp_list.append(-1)
 
-	return locus_read_name_list, num_repeat_align_list, num_repeat_length_list
+	return locus_read_name_list, num_repeat_align_list, num_repeat_length_list, num_bp_list
 
 	#**target_svtype = target_sv.info['SVTYPE']
 	#**

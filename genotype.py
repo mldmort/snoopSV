@@ -7,7 +7,7 @@ from math import log10, factorial
 import subprocess
 from genSV import sv_class, infer_gt_sv, infer_gt_tr, sv_signiture, tr_signature
 
-def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, tr_span_max, verbose=1):
+def make_VCF_GT(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, tr_span_max, verbose=1):
 
 	### genotyping setting
 	mapping_quality_thr = 20
@@ -22,7 +22,11 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, tr_span_max, ve
 	REF_FILE = '/oasis/scratch/comet/smmortazavi/temp_project/HUMAN_DATA/REF_GENOME/GRCh38_full_analysis_set_plus_decoy_hla.fa'
 	fa_handle = pysam.FastaFile(REF_FILE)
 
-	fh_bam = pysam.AlignmentFile(bam_file, 'rb')
+	sample_bam_dict = {}
+	with open(sample_bam_file, 'r') as fh:
+		for line in fh.readlines():
+			line = line.strip().split()
+			sample_bam_dict[line[0]] = line[1]
 
 	k_s_dict = {}
 	p_val_thr = 0.07
@@ -54,7 +58,10 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, tr_span_max, ve
 	'##INFO=<ID=TR_RM_SR,Number=0,Type=Flag,Description="TR region, in repeat masker track, not a target for genotyping">',
 	'##INFO=<ID=TR_MG,Number=0,Type=Flag,Description="TR region, in Gymreklab targets, but not in TR targets for genotyping">',
 	'##INFO=<ID=TR_REPEAT_LEN,Number=.,Type=String,Description="TR repeat length">',
-	'##INFO=<ID=TR_REPEAT_SEQ,Number=.,Type=String,Description="TR repeat sequence">'
+	'##INFO=<ID=TR_REPEAT_SEQ,Number=.,Type=String,Description="TR repeat sequence">',
+	'##INFO=<ID=TR_REPEAT_START,Number=.,Type=String,Description="TR repeat start">',
+	'##INFO=<ID=TR_REPEAT_END,Number=.,Type=String,Description="TR repeat end">',
+	'##INFO=<ID=TR_REPEAT_CN,Number=.,Type=String,Description="TR repeat copy number">'
 	]
 	new_header_FORMAT = ['##FORMAT=<ID=RV,Number=1,Type=Integer,Description="Number of reads supporting the variant sequence, from genSV">',
 	'##FORMAT=<ID=RR,Number=1,Type=Integer,Description="Number of reads around the breakpoints supporting the reference sequence, from genSV">',
@@ -66,8 +73,13 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, tr_span_max, ve
 	'##FORMAT=<ID=P_00,Number=1,Type=Float,Description="probability of 0/0 genotype, from genSV">',
 	'##FORMAT=<ID=GT_TR_AL,Number=.,Type=String,Description="Genotype in TR region, from genSV">',
 	'##FORMAT=<ID=GQ_TR_AL,Number=.,Type=String,Description="Phred-scale genotype quality score in TR region, from genSV">',
+	'##FORMAT=<ID=CN_TR_AL,Number=.,Type=String,Description="Counts of repeat unit in TR region, from genSV">',
 	'##FORMAT=<ID=GT_TR_LN,Number=.,Type=String,Description="Genotype in TR region, from genSV">',
-	'##FORMAT=<ID=GQ_TR_LN,Number=.,Type=String,Description="Phred-scale genotype quality score in TR region, from genSV">'
+	'##FORMAT=<ID=GQ_TR_LN,Number=.,Type=String,Description="Phred-scale genotype quality score in TR region, from genSV">',
+	'##FORMAT=<ID=CN_TR_LN,Number=.,Type=String,Description="Counts of repeat unit in TR region, from genSV">',
+	'##FORMAT=<ID=CN_TR_BP_H1,Number=.,Type=String,Description="Counts of base pairs in TR region, from genSV">',
+	'##FORMAT=<ID=CN_TR_BP_H2,Number=.,Type=String,Description="Counts of base pairs in TR region, from genSV">',
+	'##FORMAT=<ID=CN_TR_BP_H0,Number=.,Type=String,Description="Counts of base pairs in TR region, from genSV">'
 	]
 
 	fh_vcf_in = pysam.VariantFile(vcf_in)
@@ -76,6 +88,12 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, tr_span_max, ve
 		header_in.add_line(line)
 
 	fh_vcf_out = pysam.VariantFile(vcf_out, mode='w', header=header_in)
+
+	skip_region_list = [\
+		{'chrom':'chr1', 'start':143150000, 'stop':149900000}, \
+		{'chrom':'chr16', 'start':46380000, 'stop':46425000}, \
+		{'chrom':'chr1', 'start':125060000, 'stop':125200000} \
+	]
 
 	count_skip_region = 0
 	count_skip_sec = 0
@@ -91,20 +109,16 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, tr_span_max, ve
 		start = rec.start
 		stop = rec.stop
 
-		#if svtype == 'INV':
-		#	region_buffer_length = max(region_buffer_length, svlen/10.)
-
-		chr1_region_1=143150000
-		chr1_region_2=149900000
-		if (chrom=='chr1') and ((start > chr1_region_1) and (start < chr1_region_2)) and ((stop > chr1_region_1) and (stop < chr1_region_2)):
+		if (chrom==skip_region_list[0]['chrom']) and ((start > skip_region_list[0]['start']) and (start < skip_region_list[0]['stop'])) and ((stop > skip_region_list[0]['start']) and (stop < skip_region_list[0]['stop'])):
+			count_skip_region += 1
+			continue
+		if (chrom==skip_region_list[1]['chrom']) and ((start > skip_region_list[1]['start']) and (start < skip_region_list[1]['stop'])) and ((stop > skip_region_list[1]['start']) and (stop < skip_region_list[1]['stop'])):
+			count_skip_region += 1
+			continue
+		if (chrom==skip_region_list[2]['chrom']) and ((start > skip_region_list[2]['start']) and (start < skip_region_list[2]['stop'])) and ((stop > skip_region_list[2]['start']) and (stop < skip_region_list[2]['stop'])):
 			count_skip_region += 1
 			continue
 
-		chr16_region_1=46380000
-		chr16_region_2=46425000
-		if (chrom=='chr16') and ((start > chr16_region_1) and (start < chr16_region_2)) and ((stop > chr16_region_1) and (stop < chr16_region_2)):
-			count_skip_region += 1
-			continue
 		#print('svtype:', svtype)
 		#print('svlen:', svlen) 
 		#print('chr2:', chr2) 
@@ -191,6 +205,9 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, tr_span_max, ve
 		if TR_bool:
 			rec.info['TR_REPEAT_LEN'] = ','.join([str(x) for x in period_len_list])
 			rec.info['TR_REPEAT_SEQ'] = ','.join([str(x) for x in period_seq_list])
+			rec.info['TR_REPEAT_START'] = ','.join([str(x) for x in tr_start_list])
+			rec.info['TR_REPEAT_END'] = ','.join([str(x) for x in tr_end_list])
+			rec.info['TR_REPEAT_CN'] = ','.join([str(x) for x in CN_list])
 		if not TR_bool:
 			if len(tr_all_isecs)>0:
 				rec.info['TR_TRF_OTHER'] = True
@@ -199,58 +216,73 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, tr_span_max, ve
 			if len(tr_mg_isecs)>0:
 				rec.info['TR_MG'] = True
 
-		sample_supp_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()}
-		visited_read_set = set()
-		tr_supp_al_list = [[] for i in range(len(tr_tar_isecs))]
-		tr_supp_ln_list = [[] for i in range(len(tr_tar_isecs))]
-		tr_GT_al_list = []
-		tr_GT_ln_list = []
-		tr_GQ_al_list = []
-		tr_GQ_ln_list = []
+		for sample, bam_file in sample_bam_dict.items():
+			fh_bam = pysam.AlignmentFile(bam_file, 'rb')
+			sample_supp_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()}
+			visited_read_set_list = [set() for i in range(len(tr_tar_isecs))]
+			tr_supp_al_list = [[] for i in range(len(tr_tar_isecs))]
+			tr_supp_ln_list = [[] for i in range(len(tr_tar_isecs))]
+			tr_supp_bp_list = [{'H1':[], 'H2':[], 'H0':[]} for i in range(len(tr_tar_isecs))]
+			tr_GT_al_list = []
+			tr_GT_ln_list = []
+			tr_GQ_al_list = []
+			tr_GQ_ln_list = []
 
-		for i_read, read in enumerate(fh_bam.fetch(chrom, max(0,pos_start-region_buffer_length), pos_stop+region_buffer_length)):
-			if (not read.is_secondary) and (read.mapping_quality >= mapping_quality_thr):
-				if TR_bool and (svtype=='INS' or svtype=='DEL'):
-					locus_read_name_list, num_repeat_al_list, num_repeat_ln_list = tr_signature(read, target_sv, tr_start_list, tr_end_list, period_len_list, CN_list, period_seq_list, k_s_dict, fa_handle, visited_read_set)
-					visited_read_set.update([read.query_name])
-					for i_tr in range(len(tr_tar_isecs)):
-						if num_repeat_al_list[i_tr] >= 0:
-							tr_supp_al_list[i_tr].append(num_repeat_al_list[i_tr])
-						if num_repeat_ln_list[i_tr] >= 0:
-							tr_supp_ln_list[i_tr].append(num_repeat_ln_list[i_tr])
-				locus_read, CG_supp, SA_supp = sv_signiture(read, target_sv)
-				sample_supp_dict['locus_reads'].update([locus_read])
-				sample_supp_dict['CG_supp'].update([CG_supp])
-				sample_supp_dict['SA_supp'].update([SA_supp])
-		if TR_bool and (svtype=='INS' or svtype=='DEL'):
-			for count_list in tr_supp_al_list:
-				tr_GT, tr_GQ = infer_gt_tr(count_list, p_err=0.05, svtype=svtype)
-				tr_GT_al_list.append(tr_GT)
-				tr_GQ_al_list.append(tr_GQ)
-			for count_list in tr_supp_ln_list:
-				tr_GT, tr_GQ = infer_gt_tr(count_list, p_err=0.05, svtype=svtype)
-				tr_GT_ln_list.append(tr_GT)
-				tr_GQ_ln_list.append(tr_GQ)
-			rec.samples[0]['GT_TR_AL'] = ','.join(tr_GT_al_list)
-			rec.samples[0]['GQ_TR_AL'] = ','.join([str(x) for x in tr_GQ_al_list])
-			rec.samples[0]['GT_TR_LN'] = ','.join(tr_GT_ln_list)
-			rec.samples[0]['GQ_TR_LN'] = ','.join([str(x) for x in tr_GQ_ln_list])
-		sample_supp_dict['locus_reads'] -= {''}
-		sample_supp_dict['CG_supp'] -= {''}
-		sample_supp_dict['SA_supp'] -= {''}
-		DV_s = len(sample_supp_dict['CG_supp'] | sample_supp_dict['SA_supp'])
-		DR_s = len(sample_supp_dict['locus_reads']) - DV_s
-		assert DR_s >= 0, 'problem with DR/DV, DR: '+str(DR_s)+', DV: '+str(DV_s)+', sv_id: '+str(sv_id)
-		GT, GQ, p_11, p_01, p_00, SQ = infer_gt_sv(DR_s, DV_s, p_err=SV_p_err)
-		rec.samples[0]['RV'] = DV_s
-		rec.samples[0]['RR'] = DR_s
-		rec.samples[0]['GT_SV'] = GT
-		rec.samples[0]['GQ_SV'] = GQ
-		rec.samples[0]['P_11'] = p_11
-		rec.samples[0]['P_01'] = p_01
-		rec.samples[0]['P_00'] = p_00
-		rec.samples[0]['SQ_SV'] = SQ
-		#print('DV_s:', DV_s, 'DR_s:', DR_s, 'GT:', GT, 'GQ:', GQ, 'p_00:', p_00, 'p_01:', p_01, 'p_11:', p_11)
+			for i_read, read in enumerate(fh_bam.fetch(chrom, max(0,pos_start-region_buffer_length), pos_stop+region_buffer_length)):
+				if (not read.is_secondary) and (read.mapping_quality >= mapping_quality_thr):
+					if TR_bool and (svtype=='INS' or svtype=='DEL'):
+						locus_read_name_list, num_repeat_al_list, num_repeat_ln_list, num_bp_list = tr_signature(read, target_sv, tr_start_list, tr_end_list, period_len_list, CN_list, period_seq_list, k_s_dict, fa_handle, visited_read_set_list)
+						for i_tr in range(len(tr_tar_isecs)):
+							visited_read_set_list[i_tr].update([locus_read_name_list[i_tr]])
+						for i_tr in range(len(tr_tar_isecs)):
+							if num_repeat_al_list[i_tr] >= 0:
+								tr_supp_al_list[i_tr].append(num_repeat_al_list[i_tr])
+							if num_repeat_ln_list[i_tr] >= 0:
+								tr_supp_ln_list[i_tr].append(num_repeat_ln_list[i_tr])
+								if read.has_tag('HP'):
+									HP = read.get_tag(tag='HP')
+									tr_supp_bp_list[i_tr]['H'+str(HP)].append(num_bp_list[i_tr])
+								else:
+									tr_supp_bp_list[i_tr]['H0'].append(num_bp_list[i_tr])
+					locus_read, CG_supp, SA_supp = sv_signiture(read, target_sv)
+					sample_supp_dict['locus_reads'].update([locus_read])
+					sample_supp_dict['CG_supp'].update([CG_supp])
+					sample_supp_dict['SA_supp'].update([SA_supp])
+			fh_bam.close()
+			if TR_bool and (svtype=='INS' or svtype=='DEL'):
+				for count_list in tr_supp_al_list:
+					tr_GT, tr_GQ = infer_gt_tr(count_list, p_err=0.05, svtype=svtype)
+					tr_GT_al_list.append(tr_GT)
+					tr_GQ_al_list.append(tr_GQ)
+				for count_list in tr_supp_ln_list:
+					tr_GT, tr_GQ = infer_gt_tr(count_list, p_err=0.05, svtype=svtype)
+					tr_GT_ln_list.append(tr_GT)
+					tr_GQ_ln_list.append(tr_GQ)
+				rec.samples[sample]['GT_TR_AL'] = ','.join(tr_GT_al_list)
+				rec.samples[sample]['GQ_TR_AL'] = ','.join([str(x) for x in tr_GQ_al_list])
+				rec.samples[sample]['GT_TR_LN'] = ','.join(tr_GT_ln_list)
+				rec.samples[sample]['GQ_TR_LN'] = ','.join([str(x) for x in tr_GQ_ln_list])
+				rec.samples[sample]['CN_TR_AL'] = ','.join(['|'.join([str(y) for y in x]) if len(x)>0 else '' for x in tr_supp_al_list])
+				rec.samples[sample]['CN_TR_LN'] = ','.join(['|'.join([str(y) for y in x]) if len(x)>0 else '' for x in tr_supp_ln_list])
+				rec.samples[sample]['CN_TR_BP_H1'] = ','.join(['|'.join([str(y) for y in x['H1']]) if len(x['H1'])>0 else '' for x in tr_supp_bp_list])
+				rec.samples[sample]['CN_TR_BP_H2'] = ','.join(['|'.join([str(y) for y in x['H2']]) if len(x['H2'])>0 else '' for x in tr_supp_bp_list])
+				rec.samples[sample]['CN_TR_BP_H0'] = ','.join(['|'.join([str(y) for y in x['H0']]) if len(x['H0'])>0 else '' for x in tr_supp_bp_list])
+			sample_supp_dict['locus_reads'] -= {''}
+			sample_supp_dict['CG_supp'] -= {''}
+			sample_supp_dict['SA_supp'] -= {''}
+			DV_s = len(sample_supp_dict['CG_supp'] | sample_supp_dict['SA_supp'])
+			DR_s = len(sample_supp_dict['locus_reads']) - DV_s
+			assert DR_s >= 0, 'problem with DR/DV, DR: '+str(DR_s)+', DV: '+str(DV_s)+', sv_id: '+str(sv_id)
+			GT, GQ, p_11, p_01, p_00, SQ = infer_gt_sv(DR_s, DV_s, p_err=SV_p_err)
+			rec.samples[sample]['RV'] = DV_s
+			rec.samples[sample]['RR'] = DR_s
+			rec.samples[sample]['GT_SV'] = GT
+			rec.samples[sample]['GQ_SV'] = GQ
+			rec.samples[sample]['P_11'] = p_11
+			rec.samples[sample]['P_01'] = p_01
+			rec.samples[sample]['P_00'] = p_00
+			rec.samples[sample]['SQ_SV'] = SQ
+			#print('DV_s:', DV_s, 'DR_s:', DR_s, 'GT:', GT, 'GQ:', GQ, 'p_00:', p_00, 'p_01:', p_01, 'p_11:', p_11)
 
 		fh_vcf_out.write(rec)
 
@@ -260,8 +292,6 @@ def make_VCF_GT(vcf_in, vcf_out, contig, bam_file, n_sec, i_sec, tr_span_max, ve
 
 	fh_vcf_in.close()
 	fh_vcf_out.close()
-	fh_bam.close()
-
 
 if __name__ == '__main__':
 
@@ -271,7 +301,7 @@ if __name__ == '__main__':
 
 	vcf_in = arglist[1]
 	vcf_out = arglist[2]
-	bam_file = arglist[3]
+	sample_bam_file = arglist[3]
 	chrom = arglist[4]
 	if chrom=='None':
 		chrom = None
@@ -279,4 +309,4 @@ if __name__ == '__main__':
 	i_sec = int(arglist[6])
 
 	tr_span_max = 10000
-	make_VCF_GT(vcf_in, vcf_out, contig=chrom, bam_file=bam_file, n_sec=n_sec, i_sec=i_sec, tr_span_max=tr_span_max, verbose=1)
+	make_VCF_GT(vcf_in, vcf_out, contig=chrom, sample_bam_file=sample_bam_file, n_sec=n_sec, i_sec=i_sec, tr_span_max=tr_span_max, verbose=1)
