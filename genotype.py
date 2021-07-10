@@ -5,7 +5,7 @@ import numpy as np
 import sys
 from math import log10, factorial
 import subprocess
-from genSV import sv_class, infer_gt_sv, infer_gt_tr, sv_signiture, tr_signature
+from genSV import sv_class, infer_gt_sv, infer_gt_tr, infer_gt_tr_phased, sv_signiture, tr_signature
 
 def make_VCF_GT(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, tr_span_max, verbose=1):
 
@@ -14,13 +14,15 @@ def make_VCF_GT(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, tr_span_
 	region_buffer_length = 1000
 	SV_p_err = 0.01
 
-	TR_file_TRF_target = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot_per-2-250.bed'
+	#TR_file_TRF_target = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot_per-2-250.bed'
+	TR_file_TRF_target = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot.bed'
 	TR_file_TRF_all = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot.bed'
 	TR_file_RM_Simpe = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Repeats_Masker_Simple_repeat.bed'
 	TR_file_MG = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/hg38_ver13.bed'
 
-	REF_FILE = '/oasis/scratch/comet/smmortazavi/temp_project/HUMAN_DATA/REF_GENOME/GRCh38_full_analysis_set_plus_decoy_hla.fa'
-	fa_handle = pysam.FastaFile(REF_FILE)
+	#REF_FILE = '/oasis/scratch/comet/smmortazavi/temp_project/HUMAN_DATA/REF_GENOME/GRCh38_full_analysis_set_plus_decoy_hla.fa'
+	fa_handle = None
+        #pysam.FastaFile(REF_FILE)
 
 	sample_bam_dict = {}
 	with open(sample_bam_file, 'r') as fh:
@@ -29,13 +31,13 @@ def make_VCF_GT(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, tr_span_
 			sample_bam_dict[line[0]] = line[1]
 
 	k_s_dict = {}
-	p_val_thr = 0.07
-	for k in range(2,262):
-		for s_sel in range(k,0,-1):
-			p_val = factorial(k)/factorial(s_sel)/factorial(k-s_sel)/float(4**s_sel)
-			if p_val > p_val_thr:
-				k_s_dict[k] = s_sel + 1
-				break
+	#**p_val_thr = 0.07
+	#**for k in range(2,262):
+	#**	for s_sel in range(k,0,-1):
+	#**		p_val = factorial(k)/factorial(s_sel)/factorial(k-s_sel)/float(4**s_sel)
+	#**		if p_val > p_val_thr:
+	#**			k_s_dict[k] = s_sel + 1
+	#**			break
 
 	if contig:
 		command = ('bcftools query -r '+contig+' -f %CHROM\\n '+vcf_in).split()
@@ -73,13 +75,18 @@ def make_VCF_GT(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, tr_span_
 	'##FORMAT=<ID=P_00,Number=1,Type=Float,Description="probability of 0/0 genotype, from genSV">',
 	'##FORMAT=<ID=GT_TR_AL,Number=.,Type=String,Description="Genotype in TR region, from genSV">',
 	'##FORMAT=<ID=GQ_TR_AL,Number=.,Type=String,Description="Phred-scale genotype quality score in TR region, from genSV">',
-	'##FORMAT=<ID=CN_TR_AL,Number=.,Type=String,Description="Counts of repeat unit in TR region, from genSV">',
+	'##FORMAT=<ID=CN_TR_AL_H1,Number=.,Type=String,Description="Counts of repeat unit in TR region for H1, from genSV">',
+	'##FORMAT=<ID=CN_TR_AL_H2,Number=.,Type=String,Description="Counts of repeat unit in TR region for H2, from genSV">',
+	'##FORMAT=<ID=CN_TR_AL_H0,Number=.,Type=String,Description="Counts of repeat unit in TR region for H0, from genSV">',
 	'##FORMAT=<ID=GT_TR_LN,Number=.,Type=String,Description="Genotype in TR region, from genSV">',
 	'##FORMAT=<ID=GQ_TR_LN,Number=.,Type=String,Description="Phred-scale genotype quality score in TR region, from genSV">',
-	'##FORMAT=<ID=CN_TR_LN,Number=.,Type=String,Description="Counts of repeat unit in TR region, from genSV">',
-	'##FORMAT=<ID=CN_TR_BP_H1,Number=.,Type=String,Description="Counts of base pairs in TR region, from genSV">',
-	'##FORMAT=<ID=CN_TR_BP_H2,Number=.,Type=String,Description="Counts of base pairs in TR region, from genSV">',
-	'##FORMAT=<ID=CN_TR_BP_H0,Number=.,Type=String,Description="Counts of base pairs in TR region, from genSV">'
+	'##FORMAT=<ID=CN_TR_LN_H1,Number=.,Type=String,Description="Counts of repeat unit in TR region for H1, from genSV">',
+	'##FORMAT=<ID=CN_TR_LN_H2,Number=.,Type=String,Description="Counts of repeat unit in TR region for H2, from genSV">',
+	'##FORMAT=<ID=CN_TR_LN_H0,Number=.,Type=String,Description="Counts of repeat unit in TR region for H0, from genSV">',
+	'##FORMAT=<ID=GT_TR_BP,Number=.,Type=String,Description="Genotype in TR region, from genSV">',
+	'##FORMAT=<ID=CN_TR_BP_H1,Number=.,Type=String,Description="Counts of base pairs in TR region for H1, from genSV">',
+	'##FORMAT=<ID=CN_TR_BP_H2,Number=.,Type=String,Description="Counts of base pairs in TR region for H2, from genSV">',
+	'##FORMAT=<ID=CN_TR_BP_H0,Number=.,Type=String,Description="Counts of base pairs in TR region for H0, from genSV">'
 	]
 
 	fh_vcf_in = pysam.VariantFile(vcf_in)
@@ -220,13 +227,15 @@ def make_VCF_GT(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, tr_span_
 			fh_bam = pysam.AlignmentFile(bam_file, 'rb')
 			sample_supp_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()}
 			visited_read_set_list = [set() for i in range(len(tr_tar_isecs))]
-			tr_supp_al_list = [[] for i in range(len(tr_tar_isecs))]
-			tr_supp_ln_list = [[] for i in range(len(tr_tar_isecs))]
+			tr_supp_al_list = [{'H1':[], 'H2':[], 'H0':[]} for i in range(len(tr_tar_isecs))]
+			tr_supp_ln_list = [{'H1':[], 'H2':[], 'H0':[]} for i in range(len(tr_tar_isecs))]
 			tr_supp_bp_list = [{'H1':[], 'H2':[], 'H0':[]} for i in range(len(tr_tar_isecs))]
 			tr_GT_al_list = []
 			tr_GT_ln_list = []
+			tr_GT_bp_list = []
 			tr_GQ_al_list = []
 			tr_GQ_ln_list = []
+			tr_GQ_bp_list = []
 
 			for i_read, read in enumerate(fh_bam.fetch(chrom, max(0,pos_start-region_buffer_length), pos_stop+region_buffer_length)):
 				if (not read.is_secondary) and (read.mapping_quality >= mapping_quality_thr):
@@ -236,34 +245,54 @@ def make_VCF_GT(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, tr_span_
 							visited_read_set_list[i_tr].update([locus_read_name_list[i_tr]])
 						for i_tr in range(len(tr_tar_isecs)):
 							if num_repeat_al_list[i_tr] >= 0:
-								tr_supp_al_list[i_tr].append(num_repeat_al_list[i_tr])
+								if read.has_tag('HP'):
+									HP = read.get_tag(tag='HP')
+									tr_supp_al_list[i_tr]['H'+str(HP)].append(num_repeat_al_list[i_tr])
+								else:
+									tr_supp_al_list[i_tr]['H0'].append(num_repeat_al_list[i_tr])
 							if num_repeat_ln_list[i_tr] >= 0:
-								tr_supp_ln_list[i_tr].append(num_repeat_ln_list[i_tr])
 								if read.has_tag('HP'):
 									HP = read.get_tag(tag='HP')
 									tr_supp_bp_list[i_tr]['H'+str(HP)].append(num_bp_list[i_tr])
+									tr_supp_ln_list[i_tr]['H'+str(HP)].append(num_repeat_ln_list[i_tr])
 								else:
 									tr_supp_bp_list[i_tr]['H0'].append(num_bp_list[i_tr])
+									tr_supp_ln_list[i_tr]['H0'].append(num_repeat_ln_list[i_tr])
 					locus_read, CG_supp, SA_supp = sv_signiture(read, target_sv)
 					sample_supp_dict['locus_reads'].update([locus_read])
 					sample_supp_dict['CG_supp'].update([CG_supp])
 					sample_supp_dict['SA_supp'].update([SA_supp])
 			fh_bam.close()
 			if TR_bool and (svtype=='INS' or svtype=='DEL'):
-				for count_list in tr_supp_al_list:
-					tr_GT, tr_GQ = infer_gt_tr(count_list, p_err=0.05, svtype=svtype)
-					tr_GT_al_list.append(tr_GT)
-					tr_GQ_al_list.append(tr_GQ)
-				for count_list in tr_supp_ln_list:
-					tr_GT, tr_GQ = infer_gt_tr(count_list, p_err=0.05, svtype=svtype)
+				#**for count_list in tr_supp_al_list:
+				#**	tr_GT, tr_GQ = infer_gt_tr(count_list, p_err=0.05, svtype=svtype)
+				#**	tr_GT_al_list.append(tr_GT)
+				#**	tr_GQ_al_list.append(tr_GQ)
+				#**for count_list in tr_supp_ln_list:
+				#**	tr_GT, tr_GQ = infer_gt_tr(count_list, p_err=0.05, svtype=svtype)
+				#**	tr_GT_ln_list.append(tr_GT)
+				#**	tr_GQ_ln_list.append(tr_GQ)
+				#**rec.samples[sample]['GT_TR_AL'] = ','.join(tr_GT_al_list)
+				#**rec.samples[sample]['GQ_TR_AL'] = ','.join([str(x) for x in tr_GQ_al_list])
+				#**rec.samples[sample]['GT_TR_LN'] = ','.join(tr_GT_ln_list)
+				#**rec.samples[sample]['GQ_TR_LN'] = ','.join([str(x) for x in tr_GQ_ln_list])
+
+				for count_dict in tr_supp_ln_list:
+					tr_GT = infer_gt_tr_phased(count_dict)
 					tr_GT_ln_list.append(tr_GT)
-					tr_GQ_ln_list.append(tr_GQ)
-				rec.samples[sample]['GT_TR_AL'] = ','.join(tr_GT_al_list)
-				rec.samples[sample]['GQ_TR_AL'] = ','.join([str(x) for x in tr_GQ_al_list])
+				for count_dict in tr_supp_bp_list:
+					tr_GT = infer_gt_tr_phased(count_dict)
+					tr_GT_bp_list.append(tr_GT)
 				rec.samples[sample]['GT_TR_LN'] = ','.join(tr_GT_ln_list)
-				rec.samples[sample]['GQ_TR_LN'] = ','.join([str(x) for x in tr_GQ_ln_list])
-				rec.samples[sample]['CN_TR_AL'] = ','.join(['|'.join([str(y) for y in x]) if len(x)>0 else '' for x in tr_supp_al_list])
-				rec.samples[sample]['CN_TR_LN'] = ','.join(['|'.join([str(y) for y in x]) if len(x)>0 else '' for x in tr_supp_ln_list])
+				rec.samples[sample]['GT_TR_BP'] = ','.join(tr_GT_bp_list)
+
+				#rec.samples[sample]['CN_TR_AL'] = ','.join(['|'.join([str(y) for y in x]) if len(x)>0 else '' for x in tr_supp_al_list])
+				#**rec.samples[sample]['CN_TR_AL_H1'] = ','.join(['|'.join([str(y) for y in x['H1']]) if len(x['H1'])>0 else '' for x in tr_supp_al_list])
+				#**rec.samples[sample]['CN_TR_AL_H2'] = ','.join(['|'.join([str(y) for y in x['H2']]) if len(x['H2'])>0 else '' for x in tr_supp_al_list])
+				#**rec.samples[sample]['CN_TR_AL_H0'] = ','.join(['|'.join([str(y) for y in x['H0']]) if len(x['H0'])>0 else '' for x in tr_supp_al_list])
+				rec.samples[sample]['CN_TR_LN_H1'] = ','.join(['|'.join([str(y) for y in x['H1']]) if len(x['H1'])>0 else '' for x in tr_supp_ln_list])
+				rec.samples[sample]['CN_TR_LN_H2'] = ','.join(['|'.join([str(y) for y in x['H2']]) if len(x['H2'])>0 else '' for x in tr_supp_ln_list])
+				rec.samples[sample]['CN_TR_LN_H0'] = ','.join(['|'.join([str(y) for y in x['H0']]) if len(x['H0'])>0 else '' for x in tr_supp_ln_list])
 				rec.samples[sample]['CN_TR_BP_H1'] = ','.join(['|'.join([str(y) for y in x['H1']]) if len(x['H1'])>0 else '' for x in tr_supp_bp_list])
 				rec.samples[sample]['CN_TR_BP_H2'] = ','.join(['|'.join([str(y) for y in x['H2']]) if len(x['H2'])>0 else '' for x in tr_supp_bp_list])
 				rec.samples[sample]['CN_TR_BP_H0'] = ','.join(['|'.join([str(y) for y in x['H0']]) if len(x['H0'])>0 else '' for x in tr_supp_bp_list])
@@ -308,5 +337,6 @@ if __name__ == '__main__':
 	n_sec = int(arglist[5])
 	i_sec = int(arglist[6])
 
-	tr_span_max = 10000
+	#tr_span_max = 10000
+	tr_span_max = 1e9
 	make_VCF_GT(vcf_in, vcf_out, contig=chrom, sample_bam_file=sample_bam_file, n_sec=n_sec, i_sec=i_sec, tr_span_max=tr_span_max, verbose=1)

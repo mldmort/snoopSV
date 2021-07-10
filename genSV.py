@@ -101,6 +101,32 @@ def infer_gt_tr(count_list, p_err, svtype):
 	
 	return GT, GQ
 
+def infer_gt_tr_phased(count_dict):
+	
+	h1_list = []
+	h2_list = []
+	h0_list = []
+	h1_list.extend(count_dict['H1'])
+	h2_list.extend(count_dict['H2'])
+	h0_list.extend(count_dict['H0'])
+	if len(h0_list) > 0:
+		if len(h1_list) == 0:
+			h1_list.extend(h0_list)
+		if len(h2_list) == 0:
+			h2_list.extend(h0_list)
+
+	if len(h1_list) > 0:
+		h1_gt = str(int(np.median(h1_list)))
+	else:
+		h1_gt = '.'
+
+	if len(h2_list) > 0:
+		h2_gt = str(int(np.median(h2_list)))
+	else:
+		h2_gt = '.'
+
+	return h1_gt+'|'+h2_gt
+
 def get_cigar_dict(read, ins_len_thr, del_len_thr):
 	read_ref_start = read.reference_start
 	read_ref_stop = read.reference_end
@@ -639,8 +665,9 @@ def tr_signature(read, target_sv, tr_start_list, tr_end_list, period_len_list, C
 			locus_read_name_list.append(read.query_name)
 
 			read_seq_tr = get_seq_segment(read, tr_start-flanking_bp, tr_end+flanking_bp) ### tr_start and stop are 0-based
-			score_ind_list, raw_score_ind_list = AlignmentScore(period_seq, read_seq_tr, k_s_dict)
-			num_repeat_align = len(score_ind_list)
+			#score_ind_list, raw_score_ind_list = AlignmentScore(period_seq, read_seq_tr, k_s_dict)
+			#num_repeat_align = len(score_ind_list)
+			num_repeat_align = -1
 			num_repeat_length = int(round((len(read_seq_tr)-2.*flanking_bp)/period_len))
 			num_repeat_align_list.append(num_repeat_align)
 			num_repeat_length_list.append(num_repeat_length)
