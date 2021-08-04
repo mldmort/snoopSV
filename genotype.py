@@ -418,7 +418,10 @@ def get_data_lin(annot_in, cov_in):
 		rv_list = str(data_annot.loc[index, 'rv']).split(',')
 		for i_sam, sample in enumerate(samples_list):
 			mapq = mapq_list[i_sam]
-			dp_fr = dp_fr_list[i_sam]
+			if svtype!='TRA':
+				dp_fr = dp_fr_list[i_sam]
+			else:
+				dp_fr = '.'
 			dp = dp_list[i_sam]
 			rv = rv_list[i_sam]
 			temp = pd.DataFrame(data_annot.loc[[index], columns_common])
@@ -439,13 +442,18 @@ def get_data_lin(annot_in, cov_in):
 	data_lin['dp'] = data_lin['dp'].astype(float)
 	data_lin['mapq'] = data_lin['mapq'].astype(float)
 
-	### split dp_fr
-	data_lin.loc[(data_lin.svtype!='TRA_1') & (data_lin.svtype!='TRA_2'), 'dp_fr_1'] = data_lin.loc[(data_lin.svtype!='TRA_1') & (data_lin.svtype!='TRA_2'), 'dp_fr'].str.split(pat=':', expand=True)[0]
-	data_lin.loc[(data_lin.svtype!='TRA_1') & (data_lin.svtype!='TRA_2'), 'dp_fr_2'] = data_lin.loc[(data_lin.svtype!='TRA_1') & (data_lin.svtype!='TRA_2'), 'dp_fr'].str.split(pat=':', expand=True)[1]
+	sub_data = data_lin.loc[(data_lin.svtype!='TRA_1') & (data_lin.svtype!='TRA_2')]
+	if not sub_data.empty:
+		### split dp_fr
+		data_lin.loc[(data_lin.svtype!='TRA_1') & (data_lin.svtype!='TRA_2'), 'dp_fr_1'] = data_lin.loc[(data_lin.svtype!='TRA_1') & (data_lin.svtype!='TRA_2'), 'dp_fr'].str.split(pat=':', expand=True)[0]
+		data_lin.loc[(data_lin.svtype!='TRA_1') & (data_lin.svtype!='TRA_2'), 'dp_fr_2'] = data_lin.loc[(data_lin.svtype!='TRA_1') & (data_lin.svtype!='TRA_2'), 'dp_fr'].str.split(pat=':', expand=True)[1]
+		### correct depth
+		data_lin.loc[(data_lin.svtype!='TRA_1') & (data_lin.svtype!='TRA_2'), 'dp_cor'] = (data_lin.loc[(data_lin.svtype!='TRA_1') & (data_lin.svtype!='TRA_2'), 'dp_fr_1'].astype(float) + data_lin.loc[(data_lin.svtype!='TRA_1') & (data_lin.svtype!='TRA_2'), 'dp_fr_2'].astype(float) + 1e-7) / 2.
 
-	### correct depth
-	data_lin.loc[(data_lin.svtype!='TRA_1') & (data_lin.svtype!='TRA_2'), 'dp_cor'] = (data_lin.loc[(data_lin.svtype!='TRA_1') & (data_lin.svtype!='TRA_2'), 'dp_fr_1'].astype(float) + data_lin.loc[(data_lin.svtype!='TRA_1') & (data_lin.svtype!='TRA_2'), 'dp_fr_2'].astype(float) + 1e-7) / 2.
-	data_lin.loc[(data_lin.svtype=='TRA_1') | (data_lin.svtype=='TRA_2'), 'dp_cor'] = data_lin.loc[(data_lin.svtype=='TRA_1') | (data_lin.svtype=='TRA_2'), 'dp'] + 1e-7
+	sub_data = data_lin.loc[(data_lin.svtype=='TRA_1') | (data_lin.svtype=='TRA_2')]
+	if not sub_data.empty:
+		### correct depth
+		data_lin.loc[(data_lin.svtype=='TRA_1') | (data_lin.svtype=='TRA_2'), 'dp_cor'] = data_lin.loc[(data_lin.svtype=='TRA_1') | (data_lin.svtype=='TRA_2'), 'dp'] + 1e-7
 
 	### compute DV/depth with corrected depth
 	data_lin['rv/depth'] = data_lin.rv / data_lin.dp_cor

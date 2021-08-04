@@ -60,6 +60,7 @@ while read -r line; do
 	sep=""
 	for sample in ${sample_list[@]}; do
 		samples=$samples$sep$sample
+		sep=","
 	done
 
 	if [ $svtype != "TRA" ]; then
