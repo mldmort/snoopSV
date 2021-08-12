@@ -268,20 +268,20 @@ def get_seq_segment(read, ref_start, ref_stop, flanking_bp=0):
 			if (cur_cigar == 'M'):
 				#print('seq_start set at M, cur_ref_pos:', cur_ref_pos, 'nxt_ref_pos:', nxt_ref_pos, 'ref_start:', ref_start)
 				seq_start = cur_seq_pos + (ref_start - cur_ref_pos)
-			elif (cur_cigar == 'D' or cur_cigar == 'I'):
+			elif (cur_cigar == 'D'):
 				#print('seq_start set at D/I, cur_ref_pos:', cur_ref_pos, 'nxt_ref_pos:', nxt_ref_pos, 'ref_start:', ref_start, 'cur_cigar:', cur_cigar)
 				seq_start = cur_seq_pos
 			else:
-				assert 0==1, 'wrong cir_cigar: '+cur_cigar
+				assert 0==1, 'wrong cur_cigar: '+cur_cigar+', cur_cigar should not be I. should be cought earlier'
 		if (ref_stop >= cur_ref_pos) and (ref_stop <= nxt_ref_pos) and (seq_stop == -1):
 			if (cur_cigar == 'M'):
 				#print('seq_stop set at M, cur_ref_pos:', cur_ref_pos, 'nxt_ref_pos:', nxt_ref_pos, 'ref_stop:', ref_stop)
 				seq_stop = cur_seq_pos + (ref_stop - cur_ref_pos)
-			elif (cur_cigar == 'D' or cur_cigar == 'I'):
-				#print('seq_start set at D/I, cur_ref_pos:', cur_ref_pos, 'nxt_ref_pos:', nxt_ref_pos, 'ref_start:', ref_start, 'cur_cigar:', cur_cigar)
+			elif (cur_cigar == 'D'):
+				#print('seq_start set at D/I, cur_ref_pos:', cur_ref_pos, 'nxt_ref_pos:', nxt_ref_pos, 'ref_stop:', ref_stop, 'cur_cigar:', cur_cigar)
 				seq_stop = cur_seq_pos
 			else:
-				assert 0==1, 'wrong cir_cigar: '+cur_cigar
+				assert 0==1, 'wrong cur_cigar: '+cur_cigar+', cur_cigar should not be I. should be cought earlier'
 
 		cur_ref_pos = nxt_ref_pos
 		cur_seq_pos = nxt_seq_pos
@@ -302,6 +302,17 @@ def get_seq_segment(read, ref_start, ref_stop, flanking_bp=0):
 
 	return sequence
 	
+def calc_recip_overlap(s1, e1, s2, e2):
+	if (s1 > e2) or (s2 > e1):
+		return 0
+	so = max(s1, s2)
+	eo = min(e1, e2)
+	lo = eo - so
+	assert lo >= 0, 'problem in calc_recip_overlap, s1,e1,s2,e2,lo: '+str(s1)+','+str(e1)+','+str(s2)+','+str(e2)+','+str(lo)
+	f1 = float(lo) / float(e1 - s1)
+	f2 = float(lo) / float(e2 - s2)
+	f = min(f1, f2)
+	return f
 
 def sv_signiture(read, target_sv):
 
@@ -326,6 +337,8 @@ def sv_signiture(read, target_sv):
 	len_ratio_tol = 0.25
 	ins_len_thr = 20
 	del_len_thr = 20
+	del_recip_overlap_thr = 0.3
+	ins_recip_overlap_thr = 0.01
 
 	read_chrom = read.reference_name
 	read_ref_start = read.reference_start
@@ -401,15 +414,23 @@ def sv_signiture(read, target_sv):
 		sum_cigar_len = 0
 		for ind, ref_pos in enumerate(ref_pos_list):
 			if (ref_pos > region_buffer_left) and (ref_pos < region_buffer_right):
+				#ref_len_half = int(ref_len_list[ind] / 2)
+				#ref_pos_start = ref_pos - ref_len_half
+				#ref_pos_stop = ref_pos + ref_len_half
+				#recip_overlap = calc_recip_overlap(ref_pos_start, ref_pos_stop, target_start-ref_len_half, target_stop+ref_len_half)
+				#if recip_overlap >= ins_recip_overlap_thr:
+				#	CG_read_supp = True
+				#	CG_read_name = read.query_name
+				#	break
 				ref_len = ref_len_list[ind]
 				sum_cigar_len += ref_len
 				if float(abs(ref_len-target_svlen))/float(target_svlen) < len_ratio_tol:
 					CG_read_supp = True
 					CG_read_name = read.query_name
 					break
-		if (not CG_read_supp) and (float(abs(sum_cigar_len-target_svlen))/float(target_svlen) < len_ratio_tol):
-			CG_read_supp = True
-			CG_read_name = read.query_name
+		#if (not CG_read_supp) and (float(abs(sum_cigar_len-target_svlen))/float(target_svlen) < len_ratio_tol):
+		#	CG_read_supp = True
+		#	CG_read_name = read.query_name
 	elif target_svtype == 'DEL':
 		ref_pos_list = cigar_dict['D']['ref_pos']
 		sum_cigar_len = 0
@@ -417,15 +438,20 @@ def sv_signiture(read, target_sv):
 			ref_pos_start = ref_pos_t[0]
 			ref_pos_stop = ref_pos_t[1]
 			if (ref_pos_start > region_buffer_left) and (ref_pos_stop < region_buffer_right):
-				ref_len = ref_pos_stop - ref_pos_start
-				sum_cigar_len += ref_len
-				if float(abs(ref_len-target_svlen))/float(target_svlen) < len_ratio_tol:
+				recip_overlap = calc_recip_overlap(ref_pos_start, ref_pos_stop, target_start, target_stop)
+				if recip_overlap >= del_recip_overlap_thr:
 					CG_read_supp = True
 					CG_read_name = read.query_name
 					break
-		if (not CG_read_supp) and (float(abs(sum_cigar_len-target_svlen))/float(target_svlen) < len_ratio_tol):
-			CG_read_supp = True
-			CG_read_name = read.query_name
+				#ref_len = ref_pos_stop - ref_pos_start
+				#sum_cigar_len += ref_len
+				#if float(abs(ref_len-target_svlen))/float(target_svlen) < len_ratio_tol:
+				#	CG_read_supp = True
+				#	CG_read_name = read.query_name
+				#	break
+		#if (not CG_read_supp) and (float(abs(sum_cigar_len-target_svlen))/float(target_svlen) < len_ratio_tol):
+		#	CG_read_supp = True
+		#	CG_read_name = read.query_name
 
 	#chr22,36701741,-,1433S4788M248D24S,60,725;	
 	SA_next_right = {'SA_ref_start':-1, 'SA_ref_stop':-1, 'SA_read_start':1e15, 'SA_read_stop':1e15}
@@ -687,16 +713,22 @@ def tr_signature_2(read, tr_start, tr_end, period_len, CN, period_seq, k_s_dict,
 	read_ref_stop = read.reference_end
 
 	flanking_bp = period_len
-	#print('tr_start:', tr_start)
-	#print('tr_end:', tr_end)
-	#print('period_len:', period_len)
-	#print('period_seq:', period_seq)
 
 	if ((read_ref_start <= tr_start) and (read_ref_stop >= tr_end) and (read.query_name not in visited_read_set)):
+
+		#print('read.query_name', read.query_name)
+		#print('tr_start:', tr_start)
+		#print('tr_end:', tr_end)
+		#print('period_len:', period_len)
+		#print('period_seq:', period_seq)
 
 		locus_read_name = read.query_name
 
 		read_seq_tr = get_seq_segment(read, tr_start-flanking_bp, tr_end+flanking_bp) ### tr_start and stop are 0-based
+		#print('read_seq_tr:')
+		#print(read_seq_tr)
+		#print('len(read_seq_tr):')
+		#print(len(read_seq_tr))
 		#score_ind_list, raw_score_ind_list = AlignmentScore(period_seq, read_seq_tr, k_s_dict)
 		#num_repeat_align = len(score_ind_list)
 		num_repeat_align = -1
