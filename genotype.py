@@ -173,12 +173,35 @@ def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec,
 			rec.samples[sample]['GT_TR_LN'] = tr_GT_ln
 			rec.samples[sample]['GT_TR_BP'] = tr_GT_bp
 
-			rec.samples[sample]['CN_TR_LN_H1'] = '|'.join([str(x) for x in tr_supp_ln['H1']])
-			rec.samples[sample]['CN_TR_LN_H2'] = '|'.join([str(x) for x in tr_supp_ln['H2']])
-			rec.samples[sample]['CN_TR_LN_H0'] = '|'.join([str(x) for x in tr_supp_ln['H0']])
-			rec.samples[sample]['CN_TR_BP_H1'] = '|'.join([str(x) for x in tr_supp_bp['H1']])
-			rec.samples[sample]['CN_TR_BP_H2'] = '|'.join([str(x) for x in tr_supp_bp['H2']])
-			rec.samples[sample]['CN_TR_BP_H0'] = '|'.join([str(x) for x in tr_supp_bp['H0']])
+			temp = '|'.join([str(x) for x in tr_supp_ln['H1']])
+			if temp == '':
+				temp = '.'
+			rec.samples[sample]['CN_TR_LN_H1'] = temp
+
+			temp = '|'.join([str(x) for x in tr_supp_ln['H2']])
+			if temp == '':
+				temp = '.'
+			rec.samples[sample]['CN_TR_LN_H2'] = temp
+
+			temp = '|'.join([str(x) for x in tr_supp_ln['H0']])
+			if temp == '':
+				temp = '.'
+			rec.samples[sample]['CN_TR_LN_H0'] = temp
+
+			temp = '|'.join([str(x) for x in tr_supp_bp['H1']])
+			if temp == '':
+				temp = '.'
+			rec.samples[sample]['CN_TR_BP_H1'] = temp
+
+			temp = '|'.join([str(x) for x in tr_supp_bp['H2']])
+			if temp == '':
+				temp = '.'
+			rec.samples[sample]['CN_TR_BP_H2'] = temp
+
+			temp = '|'.join([str(x) for x in tr_supp_bp['H0']])
+			if temp == '':
+				temp = '.'
+			rec.samples[sample]['CN_TR_BP_H0'] = temp
 
 		fh_vcf_out.write(rec)
 
