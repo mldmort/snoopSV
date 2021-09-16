@@ -10,7 +10,9 @@ import argparse
 import pickle
 
 ### global variables
-new_header_INFO = ['##INFO=<ID=TR,Number=0,Type=Flag,Description="TR region, target for TR genotyping">',
+new_header_INFO = [
+'##INFO=<ID=SKIP_REGION,Number=0,Type=Flag,Description="Skip this call for genotyping, since it falls into skipped regions">',
+'##INFO=<ID=TR,Number=0,Type=Flag,Description="TR region, target for TR genotyping">',
 '##INFO=<ID=TR_TRF_OTHER,Number=0,Type=Flag,Description="TR region, in TRF track but not a target for genotyping">',
 '##INFO=<ID=TR_RM_SR,Number=0,Type=Flag,Description="TR region, in repeat masker track, not a target for genotyping">',
 '##INFO=<ID=TR_MG,Number=0,Type=Flag,Description="TR region, in Gymreklab targets, but not in TR targets for genotyping">',
@@ -20,7 +22,8 @@ new_header_INFO = ['##INFO=<ID=TR,Number=0,Type=Flag,Description="TR region, tar
 '##INFO=<ID=TR_REPEAT_END,Number=.,Type=String,Description="TR repeat end">',
 '##INFO=<ID=TR_REPEAT_CN,Number=.,Type=String,Description="TR repeat copy number">'
 ]
-new_header_FORMAT = ['##FORMAT=<ID=RV,Number=1,Type=Integer,Description="Number of reads supporting the variant sequence, from genSV">',
+new_header_FORMAT = [
+'##FORMAT=<ID=RV,Number=1,Type=Integer,Description="Number of reads supporting the variant sequence, from genSV">',
 '##FORMAT=<ID=RR,Number=1,Type=Integer,Description="Number of reads around the breakpoints supporting the reference sequence, from genSV">',
 '##FORMAT=<ID=GT_SV,Number=1,Type=String,Description="Genotype of the variant, from genSV">',
 '##FORMAT=<ID=GQ_SV,Number=1,Type=Integer,Description="Phred-scale genotype quality score, from genSV">',
@@ -264,6 +267,8 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1):
 
 		if skip_region(skip_region_list, chrom, start, stop):
 			count_skip_region += 1
+			rec.info['SKIP_REGION'] = True
+			fh_vcf_out.write(rec)
 			continue
 
 		#print('svtype:', svtype)
@@ -359,6 +364,7 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1):
 
 		if TR_bool and (svtype=='INS' or svtype=='DEL'):
 			count_skip_tr += 1
+			fh_vcf_out.write(rec)
 			continue
 
 		for sample, bam_file in sample_bam_dict.items():
