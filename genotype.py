@@ -25,7 +25,14 @@ new_header_INFO = [
 new_header_FORMAT = [
 '##FORMAT=<ID=RV,Number=1,Type=Integer,Description="Number of reads supporting the variant sequence, from genSV">',
 '##FORMAT=<ID=RR,Number=1,Type=Integer,Description="Number of reads around the breakpoints supporting the reference sequence, from genSV">',
+'##FORMAT=<ID=RV_P,Number=1,Type=Integer,Description="Number of reads supporting the variant sequence, paternal, from genSV">',
+'##FORMAT=<ID=RR_P,Number=1,Type=Integer,Description="Number of reads around the breakpoints supporting the reference sequence, paternal, from genSV">',
+'##FORMAT=<ID=RV_M,Number=1,Type=Integer,Description="Number of reads supporting the variant sequence, maternal, from genSV">',
+'##FORMAT=<ID=RR_M,Number=1,Type=Integer,Description="Number of reads around the breakpoints supporting the reference sequence, maternal, from genSV">',
+'##FORMAT=<ID=RV_N,Number=1,Type=Integer,Description="Number of reads supporting the variant sequence, not phased, from genSV">',
+'##FORMAT=<ID=RR_N,Number=1,Type=Integer,Description="Number of reads around the breakpoints supporting the reference sequence, not phased, from genSV">',
 '##FORMAT=<ID=GT_SV,Number=1,Type=String,Description="Genotype of the variant, from genSV">',
+'##FORMAT=<ID=GT_SV_PH,Number=1,Type=String,Description="phased genotype of the variant, from genSV">',
 '##FORMAT=<ID=GQ_SV,Number=1,Type=Integer,Description="Phred-scale genotype quality score, from genSV">',
 '##FORMAT=<ID=SQ_SV,Number=1,Type=Integer,Description="Phred-scale sample quality score, from genSV">',
 '##FORMAT=<ID=P_11,Number=1,Type=Float,Description="probability of 1/1 genotype, from genSV">',
@@ -70,6 +77,43 @@ def skip_region(skip_region_list, chrom, start, stop):
 		return True
 
 	return False
+
+def get_phased_gt(GT_SV, RV_P, RV_M):
+	if GT_SV == './.':
+		return GT_SV
+	assert ((RV_P>=0) and (RV_M>=0)), 'problem RV_P: '+str(RV_P)+' ,RV_M: '+str(RV_M)
+	assert (GT_SV=='1/1' or GT_SV=='0/1' or GT_SV=='0/0'), 'problem GT_SV: '+GT_SV
+	if GT_SV == '1/1':
+		if (RV_P > 0) and (RV_M > 0):
+			GT_SV_PH = '1|1'
+		elif (RV_P == 0) or (RV_M == 0):
+			GT_SV_PH = GT_SV
+		else:
+			assert 0==1, 'problem in get_phased_gt, GT_SV: '+GT_SV+' ,RV_P: '+str(RV_P)+' ,RV_M: '+str(RV_M)
+	elif GT_SV == '0/1':
+		if (RV_P > 0) and (RV_M > 0):
+			GT_SV_PH = '1|1'
+		elif (RV_P > 0) and (RV_M == 0):
+			GT_SV_PH = '1|0'
+		elif (RV_P == 0) and (RV_M > 0):
+			GT_SV_PH = '0|1'
+		elif (RV_P == 0) and (RV_M == 0):
+			GT_SV_PH = GT_SV
+		else:
+			assert 0==1, 'problem in get_phased_gt, GT_SV: '+GT_SV+' ,RV_P: '+str(RV_P)+' ,RV_M: '+str(RV_M)
+	elif GT_SV == '0/0':
+		if (RV_P > 0) and (RV_M > 0):
+			GT_SV_PH = '1|1'
+		elif (RV_P > 0) and (RV_M == 0):
+			GT_SV_PH = '1|0'
+		elif (RV_P == 0) and (RV_M > 0):
+			GT_SV_PH = '0|1'
+		elif (RV_P == 0) and (RV_M == 0):
+			GT_SV_PH = GT_SV
+		else:
+			assert 0==1, 'problem in get_phased_gt, GT_SV: '+GT_SV+' ,RV_P: '+str(RV_P)+' ,RV_M: '+str(RV_M)
+
+	return GT_SV_PH
 
 def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, tr_span_max, verbose=1):
 
@@ -369,30 +413,77 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1):
 
 		for sample, bam_file in sample_bam_dict.items():
 			fh_bam = pysam.AlignmentFile(bam_file, 'rb')
-			sample_supp_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()}
+			read_supp_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()}
+			read_supp_P_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### paternal
+			read_supp_M_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### maternal
+			read_supp_N_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### not phased
 
 			for i_read, read in enumerate(fh_bam.fetch(chrom, max(0,pos_start-region_buffer_length), pos_stop+region_buffer_length)):
 				if (not read.is_secondary) and (read.mapping_quality >= mapping_quality_thr):
 					locus_read, CG_supp, SA_supp = sv_signiture(read, target_sv)
-					sample_supp_dict['locus_reads'].update([locus_read])
-					sample_supp_dict['CG_supp'].update([CG_supp])
-					sample_supp_dict['SA_supp'].update([SA_supp])
+					read_supp_dict['locus_reads'].update([locus_read])
+					read_supp_dict['CG_supp'].update([CG_supp])
+					read_supp_dict['SA_supp'].update([SA_supp])
+					if read.has_tag('HP'):
+						HP = read.get_tag(tag='HP')
+						if HP == 1:
+							read_supp_P_dict['locus_reads'].update([locus_read])
+							read_supp_P_dict['CG_supp'].update([CG_supp])
+							read_supp_P_dict['SA_supp'].update([SA_supp])
+						elif HP == 2:
+							read_supp_M_dict['locus_reads'].update([locus_read])
+							read_supp_M_dict['CG_supp'].update([CG_supp])
+							read_supp_M_dict['SA_supp'].update([SA_supp])
+						else:
+							assert 0==1, 'problem with HP in read: ' + read.query_name
+					else:
+						read_supp_N_dict['locus_reads'].update([locus_read])
+						read_supp_N_dict['CG_supp'].update([CG_supp])
+						read_supp_N_dict['SA_supp'].update([SA_supp])
 			fh_bam.close()
-			sample_supp_dict['locus_reads'] -= {''}
-			sample_supp_dict['CG_supp'] -= {''}
-			sample_supp_dict['SA_supp'] -= {''}
-			DV_s = len(sample_supp_dict['CG_supp'] | sample_supp_dict['SA_supp'])
-			DR_s = len(sample_supp_dict['locus_reads']) - DV_s
+			read_supp_dict['locus_reads'] -= {''}
+			read_supp_dict['CG_supp'] -= {''}
+			read_supp_dict['SA_supp'] -= {''}
+			read_supp_P_dict['locus_reads'] -= {''}
+			read_supp_P_dict['CG_supp'] -= {''}
+			read_supp_P_dict['SA_supp'] -= {''}
+			read_supp_M_dict['locus_reads'] -= {''}
+			read_supp_M_dict['CG_supp'] -= {''}
+			read_supp_M_dict['SA_supp'] -= {''}
+			read_supp_N_dict['locus_reads'] -= {''}
+			read_supp_N_dict['CG_supp'] -= {''}
+			read_supp_N_dict['SA_supp'] -= {''}
+			DV_s = len(read_supp_dict['CG_supp'] | read_supp_dict['SA_supp'])
+			DR_s = len(read_supp_dict['locus_reads']) - DV_s
 			assert DR_s >= 0, 'problem with DR/DV, DR: '+str(DR_s)+', DV: '+str(DV_s)+', sv_id: '+str(sv_id)
+			DV_s_P = len(read_supp_P_dict['CG_supp'] | read_supp_P_dict['SA_supp'])
+			DR_s_P = len(read_supp_P_dict['locus_reads']) - DV_s_P
+			assert DR_s_P >= 0, 'problem with P DR/DV, DR: '+str(DR_s_P)+', DV: '+str(DV_s_P)+', sv_id: '+str(sv_id)
+			DV_s_M = len(read_supp_M_dict['CG_supp'] | read_supp_M_dict['SA_supp'])
+			DR_s_M = len(read_supp_M_dict['locus_reads']) - DV_s_M
+			assert DR_s_M >= 0, 'problem with M DR/DV, DR: '+str(DR_s_M)+', DV: '+str(DV_s_M)+', sv_id: '+str(sv_id)
+			DV_s_N = len(read_supp_N_dict['CG_supp'] | read_supp_N_dict['SA_supp'])
+			DR_s_N = len(read_supp_N_dict['locus_reads']) - DV_s_N
+			assert DR_s_N >= 0, 'problem with N DR/DV, DR: '+str(DR_s_N)+', DV: '+str(DV_s_N)+', sv_id: '+str(sv_id)
+			assert DV_s_P+DV_s_M+DV_s_N == DV_s, 'problem with P/M/N DV_s, DV_s_P: '+str(DV_s_P)+', DV_s_M: '+str(DV_s_M)+', DV_s_N: '+str(DV_s_N)+', DV_s: '+str(DV_s)
+			assert DR_s_P+DR_s_M+DR_s_N == DR_s, 'problem with P/M/N DR_s, DR_s_P: '+str(DR_s_P)+', DR_s_M: '+str(DR_s_M)+', DR_s_N: '+str(DR_s_N)+', DR_s: '+str(DR_s)
 			GT, GQ, p_11, p_01, p_00, SQ = infer_gt_sv(DR_s, DV_s, p_err=SV_p_err)
+			GT_PH = get_phased_gt(GT, DV_s_P, DV_s_M)
 			rec.samples[sample]['RV'] = DV_s
 			rec.samples[sample]['RR'] = DR_s
+			rec.samples[sample]['RV_P'] = DV_s_P
+			rec.samples[sample]['RR_P'] = DR_s_P
+			rec.samples[sample]['RV_M'] = DV_s_M
+			rec.samples[sample]['RR_M'] = DR_s_M
+			rec.samples[sample]['RV_N'] = DV_s_N
+			rec.samples[sample]['RR_N'] = DR_s_N
 			rec.samples[sample]['GT_SV'] = GT
 			rec.samples[sample]['GQ_SV'] = GQ
 			rec.samples[sample]['P_11'] = p_11
 			rec.samples[sample]['P_01'] = p_01
 			rec.samples[sample]['P_00'] = p_00
 			rec.samples[sample]['SQ_SV'] = SQ
+			rec.samples[sample]['GT_SV_PH'] = GT_PH
 			#print('DV_s:', DV_s, 'DR_s:', DR_s, 'GT:', GT, 'GQ:', GQ, 'p_00:', p_00, 'p_01:', p_01, 'p_11:', p_11)
 
 		fh_vcf_out.write(rec)
