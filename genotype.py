@@ -12,6 +12,7 @@ import pickle
 ### global variables
 new_header_INFO = [
 '##INFO=<ID=SKIP_REGION,Number=0,Type=Flag,Description="Skip this call for genotyping, since it falls into skipped regions">',
+'##INFO=<ID=SKIP_TR,Number=0,Type=Flag,Description="Skip this call for genotyping, since it falls into TR regions">',
 '##INFO=<ID=TR,Number=0,Type=Flag,Description="TR region, target for TR genotyping">',
 '##INFO=<ID=TR_TRF_OTHER,Number=0,Type=Flag,Description="TR region, in TRF track but not a target for genotyping">',
 '##INFO=<ID=TR_RM_SR,Number=0,Type=Flag,Description="TR region, in repeat masker track, not a target for genotyping">',
@@ -280,6 +281,8 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1):
 	### i_sec should go from 0 to n_sec to cover all calls
 	i_rec_start = i_sec * int(n_calls / n_sec)
 	i_rec_end = (i_sec + 1) * int(n_calls / n_sec)
+	if (i_sec == n_sec):
+		i_rec_end = n_calls
 	if verbose == 1:
 		print('n_calls:',  n_calls)
 		print('i_sec:', i_sec)
@@ -408,6 +411,7 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1):
 
 		if TR_bool and (svtype=='INS' or svtype=='DEL'):
 			count_skip_tr += 1
+			rec.info['SKIP_TR'] = True
 			fh_vcf_out.write(rec)
 			continue
 
