@@ -220,5 +220,5 @@ while read -r line; do
 	
 	echo -e "$line\t$depth_samples\t$depth_flank_samples\t$mapq_samples_all\t$samples" >> $ANNOT_OUT
 
-done < <(bcftools query -f '%CHROM\t%POS0\t%END\t%ID\t%SVTYPE\t%CHR2\t%AVG_END\t[%RV,]\n' $VCF_IN | awk 'BEGIN{FS="\t";OFS="\t"}{if($5=="INS"){$2-=50;$3+=49}; $NF=substr($NF, 1, length($NF)-1); print $0}')
+done < <(bcftools query -e 'SKIP_REGION==1 || SKIP_TR==1' -f '%CHROM\t%POS0\t%END\t%ID\t%SVTYPE\t%CHR2\t%AVG_END\t[%RV,]\n' $VCF_IN | awk 'BEGIN{FS="\t";OFS="\t"}{if($5=="INS"){$2-=50;$3+=49}; $NF=substr($NF, 1, length($NF)-1); print $0}')
 

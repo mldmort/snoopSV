@@ -585,7 +585,8 @@ def get_data_lin(annot_in, cov_in):
 	### compute depth/cov
 	for key in sample_cov_dict:
 		for chrom in ['chr'+str(n) for n in range(1,23)]+['chrX', 'chrY']:
-			data_lin.loc[(data_lin['sample']==key) & (data_lin.chrom==chrom), 'cov'] = sample_cov_dict[key].loc[chrom, 'mean']
+			data_lin.loc[(data_lin['sample']==key) & (data_lin.chrom==chrom) & (data_lin.svtype!='TRA_2'), 'cov'] = sample_cov_dict[key].loc[chrom, 'mean']
+			data_lin.loc[(data_lin['sample']==key) & (data_lin.chr2==chrom) & (data_lin.svtype=='TRA_2'), 'cov'] = sample_cov_dict[key].loc[chrom, 'mean']
 	data_lin['depth/cov'] = data_lin['dp_cor'] / data_lin['cov']
 
 	return data_lin
@@ -647,14 +648,14 @@ def write_vcf(vcf_in, data_lin, model_labels, vcf_out):
 					for model in model_labels:
 						model_scores[model] = sub_data.loc[index, model]
 
-					rec.samples[sample]['DP'] = str(dp)
-					rec.samples[sample]['COV'] = str(cov)
-					rec.samples[sample]['MapQ'] = str(mapq)
-					rec.samples[sample]['DP_o_COV'] = str(dp_o_cov)
-					rec.samples[sample]['RV_o_DP'] = str(rv_o_dp)
+					rec.samples[sample]['DP'] = '{:.2f}'.format(dp)
+					rec.samples[sample]['COV'] = '{:.2f}'.format(cov)
+					rec.samples[sample]['MapQ'] = '{:.2f}'.format(mapq)
+					rec.samples[sample]['DP_o_COV'] = '{:.2f}'.format(dp_o_cov)
+					rec.samples[sample]['RV_o_DP'] = '{:.2f}'.format(rv_o_dp)
 					rec.samples[sample]['DP_FR'] = str(dp_fr)
 					for model, score in model_scores.items():
-						rec.samples[sample][model] = str(score)
+						rec.samples[sample][model] = '{:.2f}'.format(score)
 			else:
 				sub_data_1 = data_lin.loc[(data_lin.id==sv_id) & (data_lin.svtype=='TRA_1')]
 				sub_data_2 = data_lin.loc[(data_lin.id==sv_id) & (data_lin.svtype=='TRA_2')]
@@ -679,14 +680,14 @@ def write_vcf(vcf_in, data_lin, model_labels, vcf_out):
 						model_scores_1[model] = sub_data_1.loc[index, model]
 						model_scores_2[model] = sub_data_2.loc[sub_data_2['sample']==sample, model].values[0]
 
-					rec.samples[sample]['DP'] = str(dp_1)+'|'+str(dp_2)
-					rec.samples[sample]['COV'] = str(cov_1)+'|'+str(cov_2)
-					rec.samples[sample]['MapQ'] = str(mapq)
-					rec.samples[sample]['DP_o_COV'] = str(dp_o_cov_1)+'|'+str(dp_o_cov_2)
-					rec.samples[sample]['RV_o_DP'] = str(rv_o_dp_1)+'|'+str(rv_o_dp_2)
+					rec.samples[sample]['DP'] = '{:.2f}'.format(dp_1)+'|'+'{:.2f}'.format(dp_2)
+					rec.samples[sample]['COV'] = '{:.2f}'.format(cov_1)+'|'+'{:.2f}'.format(cov_2)
+					rec.samples[sample]['MapQ'] = '{:.2f}'.format(mapq)
+					rec.samples[sample]['DP_o_COV'] = '{:.2f}'.format(dp_o_cov_1)+'|'+'{:.2f}'.format(dp_o_cov_2)
+					rec.samples[sample]['RV_o_DP'] = '{:.2f}'.format(rv_o_dp_1)+'|'+'{:.2f}'.format(rv_o_dp_2)
 					for model, score_1 in model_scores_1.items():
 						score_2 = model_scores_2[model]
-						rec.samples[sample][model] = str(score_1)+'|'+str(score_2)
+						rec.samples[sample][model] = '{:.2f}'.format(score_1)+'|'+'{:.2f}'.format(score_2)
 			
 		fh_vcf_out.write(rec)
 
