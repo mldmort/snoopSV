@@ -13,6 +13,7 @@ import pickle
 new_header_INFO = [
 '##INFO=<ID=SKIP_REGION,Number=0,Type=Flag,Description="Skip this call for genotyping, since it falls into skipped regions">',
 '##INFO=<ID=SKIP_TR,Number=0,Type=Flag,Description="Skip this call for genotyping, since it falls into TR regions">',
+'##INFO=<ID=TR_ANNOT,Number=0,Type=Flag,Description="Tandem Repeat annotation genotyped, from genSV">',
 '##INFO=<ID=TR,Number=0,Type=Flag,Description="TR region, target for TR genotyping">',
 '##INFO=<ID=TR_TRF_OTHER,Number=0,Type=Flag,Description="TR region, in TRF track but not a target for genotyping">',
 '##INFO=<ID=TR_RM_SR,Number=0,Type=Flag,Description="TR region, in repeat masker track, not a target for genotyping">',
@@ -121,7 +122,6 @@ def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec,
 	### genotyping setting
 	mapping_quality_thr = 20
 	region_buffer_length = 1000
-	SV_p_err = 0.01
 
 	sample_bam_dict = {}
 	with open(sample_bam_file, 'r') as fh:
@@ -148,7 +148,8 @@ def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec,
 	### i_sec should go from 0 to n_sec to cover all calls
 	i_rec_start = i_sec * int(n_calls / n_sec)
 	i_rec_end = (i_sec + 1) * int(n_calls / n_sec)
-	i_rec_end = min(i_rec_end, n_calls)
+	if (i_sec == n_sec):
+		i_rec_end = n_calls
 	if verbose == 1:
 		print('n_calls:',  n_calls)
 		print('i_sec:', i_sec)
@@ -177,10 +178,6 @@ def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec,
 		period_len = int(period_len)
 		CN = float(CN)
 
-		if skip_region(skip_region_list, tr_chrom, tr_start, tr_end):
-			count_skip_region += 1
-			continue
-
 		rec = fh_vcf_out.new_record(contig=tr_chrom, start=tr_start-1, stop=tr_end, alleles=('.', '.'))
 
 		rec.info['TR_REPEAT_LEN'] = str(period_len)
@@ -188,6 +185,13 @@ def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec,
 		rec.info['TR_REPEAT_START'] = str(tr_start)
 		rec.info['TR_REPEAT_END'] = str(tr_end)
 		rec.info['TR_REPEAT_CN'] = str(CN)
+		rec.info['TR_ANNOT'] = True
+
+		if skip_region(skip_region_list, tr_chrom, tr_start, tr_end):
+			count_skip_region += 1
+			rec.info['SKIP_REGION'] = True
+			fh_vcf_out.write(rec)
+			continue
 
 		for sample, bam_file in sample_bam_dict.items():
 			fh_bam = pysam.AlignmentFile(bam_file, 'rb')
