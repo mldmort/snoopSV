@@ -108,11 +108,11 @@ def infer_gt_tr_phased(count_dict):
 	h1_list.extend(count_dict['H1'])
 	h2_list.extend(count_dict['H2'])
 	h0_list.extend(count_dict['H0'])
-	if len(h0_list) > 0:
-		if len(h1_list) == 0:
-			h1_list.extend(h0_list)
-		if len(h2_list) == 0:
-			h2_list.extend(h0_list)
+	#if len(h0_list) > 0:
+	#	if len(h1_list) == 0:
+	#		h1_list.extend(h0_list)
+	#	if len(h2_list) == 0:
+	#		h2_list.extend(h0_list)
 
 	if len(h1_list) > 0:
 		h1_gt = str(int(np.median(h1_list)))
