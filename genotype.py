@@ -51,6 +51,7 @@ new_header_FORMAT = [
 '##FORMAT=<ID=CN_TR_LN_H2,Number=.,Type=String,Description="Counts of repeat unit in TR region for H2, from genSV">',
 '##FORMAT=<ID=CN_TR_LN_H0,Number=.,Type=String,Description="Counts of repeat unit in TR region for H0, from genSV">',
 '##FORMAT=<ID=GT_TR_BP,Number=.,Type=String,Description="Genotype in TR region, from genSV">',
+'##FORMAT=<ID=BP_DV,Number=1,Type=String,Description="base pair deviation from reference in TR region, from genSV">',
 '##FORMAT=<ID=CN_TR_BP_H1,Number=.,Type=String,Description="Counts of base pairs in TR region for H1, from genSV">',
 '##FORMAT=<ID=CN_TR_BP_H2,Number=.,Type=String,Description="Counts of base pairs in TR region for H2, from genSV">',
 '##FORMAT=<ID=CN_TR_BP_H0,Number=.,Type=String,Description="Counts of base pairs in TR region for H0, from genSV">'
@@ -224,6 +225,19 @@ def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec,
 			tr_GT_bp = infer_gt_tr_phased(tr_supp_bp)
 			rec.samples[sample]['GT_TR_LN'] = tr_GT_ln
 			rec.samples[sample]['GT_TR_BP'] = tr_GT_bp
+
+			tr_len = tr_end - tr_start
+			bp_list = tr_GT_bp.split('|')
+			bp_dv_list = []
+			if bp_list[0]=='.':
+				bp_dv_list.append('.')
+			else:
+				bp_dv_list.append(str( int(bp_list[0]) - tr_len ))
+			if bp_list[1]=='.':
+				bp_dv_list.append('.')
+			else:
+				bp_dv_list.append(str( int(bp_list[1]) - tr_len ))
+			rec.samples[sample]['BP_DV'] = '|'.join(bp_dv_list)
 
 			temp = '|'.join([str(x) for x in tr_supp_ln['H1']])
 			if temp == '':
