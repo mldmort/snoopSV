@@ -203,7 +203,7 @@ def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec,
 
 			for i_read, read in enumerate(fh_bam.fetch(tr_chrom, max(0,tr_start-region_buffer_length), tr_end+region_buffer_length)):
 				if (not read.is_secondary) and (read.mapping_quality >= mapping_quality_thr):
-					locus_read_name, num_repeat_al, num_repeat_ln, num_bp = tr_signature_2(read, tr_start, tr_end, period_len, CN, period_seq, k_s_dict, visited_read_set)
+					locus_read_name, num_repeat_al, num_repeat_ln, num_bp = tr_signature_2(read, tr_start, tr_end, period_len, CN, period_seq, k_s_dict, visited_read_set, bam_file, mapping_quality_thr)
 					visited_read_set.update([locus_read_name])
 					if num_repeat_al >= 0:
 						if read.has_tag('HP'):
