@@ -118,7 +118,7 @@ def get_phased_gt(GT_SV, RV_P, RV_M):
 
 	return GT_SV_PH
 
-def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, tr_span_max, verbose=1):
+def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, tr_span_max, r_min, verbose=1):
 
 	### genotyping setting
 	mapping_quality_thr = 20
@@ -221,8 +221,8 @@ def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec,
 							tr_supp_ln['H0'].append(num_repeat_ln)
 			fh_bam.close()
 
-			tr_GT_ln = infer_gt_tr_phased(tr_supp_ln)
-			tr_GT_bp = infer_gt_tr_phased(tr_supp_bp)
+			tr_GT_ln = infer_gt_tr_phased(tr_supp_ln, r_min)
+			tr_GT_bp = infer_gt_tr_phased(tr_supp_bp, r_min)
 			rec.samples[sample]['GT_TR_LN'] = tr_GT_ln
 			rec.samples[sample]['GT_TR_BP'] = tr_GT_bp
 
@@ -760,10 +760,11 @@ def run_tr(args):
 	n_sec = args.n_section
 	i_sec = args.i_section
 	tr_span_max = args.l_max
+	r_min = args.r_min
 	for x, y in args.__dict__.items():
 		print(x,':', y)
 
-	GT_TR(tr_annot_file=tr_annot_file, vcf_in=vcf_in, vcf_out=vcf_out, contig=chrom, sample_bam_file=sample_bam_file, n_sec=n_sec, i_sec=i_sec, tr_span_max=tr_span_max, verbose=1)
+	GT_TR(tr_annot_file=tr_annot_file, vcf_in=vcf_in, vcf_out=vcf_out, contig=chrom, sample_bam_file=sample_bam_file, n_sec=n_sec, i_sec=i_sec, tr_span_max=tr_span_max, r_min=r_min, verbose=1)
 
 def run_score(args):
 	vcf_in = args.vcf_in
@@ -799,6 +800,7 @@ if __name__ == '__main__':
 	parser_tr.add_argument('-n', '--n_section', type=int, default=1, help='number of sections in the input VCF file')
 	parser_tr.add_argument('-i', '--i_section', type=int, default=0, help='which section of the input VCF file to process')
 	parser_tr.add_argument('-l', '--l_max', type=int, default=int(1e9), help='maximum TR span for genotyping')
+	parser_tr.add_argument('-r', '--r_min', type=int, default=int(1), help='minimum number of reads required in a haplotype for genotyping')
 	parser_tr.set_defaults(func=run_tr)
 
 	parser_score = subparsers.add_parser('score', help='score variants with a ML model')

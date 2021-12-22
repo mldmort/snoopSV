@@ -100,7 +100,7 @@ def infer_gt_tr(count_list, p_err, svtype):
 	
 	return GT, GQ
 
-def infer_gt_tr_phased(count_dict):
+def infer_gt_tr_phased(count_dict, r_min):
 	
 	h1_list = []
 	h2_list = []
@@ -114,12 +114,12 @@ def infer_gt_tr_phased(count_dict):
 	#	if len(h2_list) == 0:
 	#		h2_list.extend(h0_list)
 
-	if len(h1_list) > 0:
+	if len(h1_list) >= r_min:
 		h1_gt = str(int(np.median(h1_list)))
 	else:
 		h1_gt = '.'
 
-	if len(h2_list) > 0:
+	if len(h2_list) >= r_min:
 		h2_gt = str(int(np.median(h2_list)))
 	else:
 		h2_gt = '.'
