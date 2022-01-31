@@ -325,10 +325,13 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1):
 		sv_id = rec.id
 		svtype = rec.info['SVTYPE']
 		svlen = rec.info['SVLEN']
-		chr2 = rec.info['CHR2']
 		chrom = rec.chrom
 		start = rec.start
 		stop = rec.stop
+		if svtype == 'TRA':
+			chr2 = rec.info['CHR2']
+		else:
+			chr2 = chrom
 
 		if skip_region(skip_region_list, chrom, start, stop):
 			count_skip_region += 1
