@@ -176,8 +176,14 @@ def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec,
 		tr_chrom, tr_start, tr_end, period_len, CN, period_seq = tr_annot.split('\t')
 		tr_start = int(tr_start)
 		tr_end = int(tr_end)
-		period_len = int(period_len)
-		CN = float(CN)
+		try:
+			period_len = int(period_len)
+		except:
+			period_len = period_len
+		try:
+			CN = float(CN)
+		except:
+			CN = CN
 
 		rec = fh_vcf_out.new_record(contig=tr_chrom, start=tr_start-1, stop=tr_end, alleles=('.', '.'))
 
@@ -214,16 +220,20 @@ def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec,
 					if num_repeat_ln >= 0:
 						if read.has_tag('HP'):
 							HP = read.get_tag(tag='HP')
-							tr_supp_bp['H'+str(HP)].append(num_bp)
 							tr_supp_ln['H'+str(HP)].append(num_repeat_ln)
 						else:
-							tr_supp_bp['H0'].append(num_bp)
 							tr_supp_ln['H0'].append(num_repeat_ln)
+					if num_bp >= 0:
+						if read.has_tag('HP'):
+							HP = read.get_tag(tag='HP')
+							tr_supp_bp['H'+str(HP)].append(num_bp)
+						else:
+							tr_supp_bp['H0'].append(num_bp)
 			fh_bam.close()
 
-			tr_GT_ln = infer_gt_tr_phased(tr_supp_ln, r_min)
+			#tr_GT_ln = infer_gt_tr_phased(tr_supp_ln, r_min)
 			tr_GT_bp = infer_gt_tr_phased(tr_supp_bp, r_min)
-			rec.samples[sample]['GT_TR_LN'] = tr_GT_ln
+			#rec.samples[sample]['GT_TR_LN'] = tr_GT_ln
 			rec.samples[sample]['GT_TR_BP'] = tr_GT_bp
 
 			tr_len = tr_end - tr_start
@@ -239,20 +249,20 @@ def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec,
 				bp_dv_list.append(str( int(bp_list[1]) - tr_len ))
 			rec.samples[sample]['BP_DV'] = '|'.join(bp_dv_list)
 
-			temp = '|'.join([str(x) for x in tr_supp_ln['H1']])
-			if temp == '':
-				temp = '.'
-			rec.samples[sample]['CN_TR_LN_H1'] = temp
+			#temp = '|'.join([str(x) for x in tr_supp_ln['H1']])
+			#if temp == '':
+			#	temp = '.'
+			#rec.samples[sample]['CN_TR_LN_H1'] = temp
 
-			temp = '|'.join([str(x) for x in tr_supp_ln['H2']])
-			if temp == '':
-				temp = '.'
-			rec.samples[sample]['CN_TR_LN_H2'] = temp
+			#temp = '|'.join([str(x) for x in tr_supp_ln['H2']])
+			#if temp == '':
+			#	temp = '.'
+			#rec.samples[sample]['CN_TR_LN_H2'] = temp
 
-			temp = '|'.join([str(x) for x in tr_supp_ln['H0']])
-			if temp == '':
-				temp = '.'
-			rec.samples[sample]['CN_TR_LN_H0'] = temp
+			#temp = '|'.join([str(x) for x in tr_supp_ln['H0']])
+			#if temp == '':
+			#	temp = '.'
+			#rec.samples[sample]['CN_TR_LN_H0'] = temp
 
 			temp = '|'.join([str(x) for x in tr_supp_bp['H1']])
 			if temp == '':
@@ -430,11 +440,11 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1):
 			if len(tr_mg_isecs)>0:
 				rec.info['TR_MG'] = True
 
-		if TR_bool and (svtype=='INS' or svtype=='DEL'):
-			count_skip_tr += 1
-			rec.info['SKIP_TR'] = True
-			fh_vcf_out.write(rec)
-			continue
+		#**if TR_bool and (svtype=='INS' or svtype=='DEL'):
+		#**	count_skip_tr += 1
+		#**	rec.info['SKIP_TR'] = True
+		#**	fh_vcf_out.write(rec)
+		#**	continue
 
 		for sample, bam_file in sample_bam_dict.items():
 			fh_bam = pysam.AlignmentFile(bam_file, 'rb')

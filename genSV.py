@@ -901,7 +901,8 @@ def tr_signature_2(read, tr_start, tr_end, period_len, CN, period_seq, k_s_dict,
 		#score_ind_list, raw_score_ind_list = AlignmentScore(period_seq, read_seq_tr, k_s_dict)
 		#num_repeat_align = len(score_ind_list)
 		num_repeat_align = -1
-		num_repeat_length = int(round((len(read_seq_tr)-max(0,flanking_bp-blank_start)-max(0,flanking_bp-blank_stop))/float(period_len)))
+		#num_repeat_length = int(round((len(read_seq_tr)-max(0,flanking_bp-blank_start)-max(0,flanking_bp-blank_stop))/float(period_len)))
+		num_repeat_length = -1
 		num_bp = len(read_seq_tr)-max(0,flanking_bp-blank_start)-max(0,flanking_bp-blank_stop)
 		#print(read_seq_tr, num_repeat_align, num_repeat_length, read.query_name)
 
@@ -942,7 +943,8 @@ def tr_signature_2(read, tr_start, tr_end, period_len, CN, period_seq, k_s_dict,
 
 			read_seq_tr, blank_start, blank_stop = get_seq_segment_supp(read, sa_read, tr_start-flanking_bp, tr_end+flanking_bp) ### tr_start and stop are 0-based
 			num_repeat_align = -1
-			num_repeat_length = int(round((len(read_seq_tr)-max(0,flanking_bp-blank_start)-max(0,flanking_bp-blank_stop))/float(period_len)))
+			#num_repeat_length = int(round((len(read_seq_tr)-max(0,flanking_bp-blank_start)-max(0,flanking_bp-blank_stop))/float(period_len)))
+			num_repeat_length = -1
 			num_bp = len(read_seq_tr)-max(0,flanking_bp-blank_start)-max(0,flanking_bp-blank_stop)
 		else:
 			num_repeat_align = -1
@@ -985,7 +987,8 @@ def tr_signature_2(read, tr_start, tr_end, period_len, CN, period_seq, k_s_dict,
 
 			read_seq_tr, blank_start, blank_stop = get_seq_segment_supp(sa_read, read, tr_start-flanking_bp, tr_end+flanking_bp) ### tr_start and stop are 0-based
 			num_repeat_align = -1
-			num_repeat_length = int(round((len(read_seq_tr)-max(0,flanking_bp-blank_start)-max(0,flanking_bp-blank_stop))/float(period_len)))
+			#num_repeat_length = int(round((len(read_seq_tr)-max(0,flanking_bp-blank_start)-max(0,flanking_bp-blank_stop))/float(period_len)))
+			num_repeat_length = -1
 			num_bp = len(read_seq_tr)-max(0,flanking_bp-blank_start)-max(0,flanking_bp-blank_stop)
 		else:
 			num_repeat_align = -1
