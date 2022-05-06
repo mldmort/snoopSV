@@ -508,7 +508,7 @@ def sv_signiture(read, target_sv):
 	ins_len_thr = 20
 	del_len_thr = 20
 	del_recip_overlap_thr = 0.3
-	ins_recip_overlap_thr = 0.01
+	#ins_recip_overlap_thr = 0.01
 
 	read_chrom = read.reference_name
 	read_ref_start = read.reference_start
@@ -622,6 +622,16 @@ def sv_signiture(read, target_sv):
 		#if (not CG_read_supp) and (float(abs(sum_cigar_len-target_svlen))/float(target_svlen) < len_ratio_tol):
 		#	CG_read_supp = True
 		#	CG_read_name = read.query_name
+	elif target_svtype == 'DUP':
+		ref_pos_list = cigar_dict['I']['ref_pos']
+		ref_len_list = cigar_dict['I']['len']
+		for ind, ref_pos in enumerate(ref_pos_list):
+			if (ref_pos > region_buffer_left) and (ref_pos < region_buffer_right):
+				sv_len = ref_len_list[ind]
+				if float(abs(sv_len-target_svlen))/float(target_svlen) < len_ratio_tol:
+					CG_read_supp = True
+					CG_read_name = read.query_name
+					break
 
 	#chr22,36701741,-,1433S4788M248D24S,60,725;	
 	SA_next_right = {'SA_ref_start':-1, 'SA_ref_stop':-1, 'SA_read_start':1e15, 'SA_read_stop':1e15}
