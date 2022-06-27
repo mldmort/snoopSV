@@ -757,13 +757,29 @@ def sv_signiture(read, target_sv):
 					SA_read_name = read.query_name
 					break
 			elif target_svtype == 'DUP':
-				sv_len = ref_overlap
-				if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol) and \
-					(   (float(abs(target_start - bp1_overlap))/float(target_svlen) < len_ratio_tol) or \
-						(float(abs(target_stop - bp2_overlap))/float(target_svlen) < len_ratio_tol) ):
-					SA_read_supp = True
-					SA_read_name = read.query_name
-					break
+				if (read_strand == SA_strand):
+					sv_len = ref_overlap
+					#if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol) and \
+					#	(   (float(abs(target_start - bp1_overlap))/float(target_svlen) < len_ratio_tol) or \
+					#		(float(abs(target_stop - bp2_overlap))/float(target_svlen) < len_ratio_tol) ):
+					if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol) and \
+						(   (float(abs(target_start - bp1_overlap)) < 100) or \
+							(float(abs(target_stop - bp2_overlap)) < 100) ):
+						SA_read_supp = True
+						SA_read_name = read.query_name
+						break
+			elif target_svtype == 'INVDUP':
+				if (read_strand != SA_strand):
+					sv_len = ref_overlap
+					#if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol) and \
+					#	(   (float(abs(target_start - bp1_overlap))/float(target_svlen) < len_ratio_tol) or \
+					#		(float(abs(target_stop - bp2_overlap))/float(target_svlen) < len_ratio_tol) ):
+					if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol) and \
+						(   (float(abs(target_start - bp1_overlap)) < 100) or \
+							(float(abs(target_stop - bp2_overlap)) < 100) ):
+						SA_read_supp = True
+						SA_read_name = read.query_name
+						break
 			elif target_svtype == 'INV':
 				if (SA_read_start > read_al_start) and (SA_read_start < SA_next_right['SA_read_start']): # SA is right of read
 					SA_next_right['SA_read_start'] = SA_read_start
