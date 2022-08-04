@@ -56,11 +56,10 @@ new_header_FORMAT = [
 '##FORMAT=<ID=CN_TR_BP_H2,Number=.,Type=String,Description="Counts of base pairs in TR region for H2, from genSV">',
 '##FORMAT=<ID=CN_TR_BP_H0,Number=.,Type=String,Description="Counts of base pairs in TR region for H0, from genSV">'
 ]
-#TR_file_TRF_target = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot_per-2-250.bed'
-TR_file_TRF_target = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot.bed'
-TR_file_TRF_all = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot.bed'
-TR_file_RM_Simpe = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Repeats_Masker_Simple_repeat.bed'
-TR_file_MG = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/hg38_ver13.bed'
+#TR_file_TRF_target = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot.bed'
+#TR_file_TRF_all = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot.bed'
+#TR_file_RM_Simpe = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Repeats_Masker_Simple_repeat.bed'
+#TR_file_MG = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/hg38_ver13.bed'
 
 skip_region_list = [\
 	{'chrom':'chr1', 'start':143150000, 'stop':149900000}, \
@@ -289,7 +288,7 @@ def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec,
 
 	fh_vcf_out.close()
 
-def GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1):
+def GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, TR_file_TRF_target, TR_file_TRF_all, TR_file_RM_Simpe, TR_file_MG, verbose=1):
 
 	### genotyping setting
 	mapping_quality_thr = 20
@@ -761,10 +760,16 @@ def run_nontr(args):
 	chrom = args.contig
 	n_sec = args.n_section
 	i_sec = args.i_section
+
+	TR_file_TRF_target = args.TR_file_TRF_target
+	TR_file_TRF_all = args.TR_file_TRF_all
+	TR_file_RM_Simpe = args.TR_file_RM_Simpe
+	TR_file_MG = args.TR_file_MG
+
 	for x, y in args.__dict__.items():
 		print(x,':', y)
 
-	GT_nonTR(vcf_in, vcf_out, contig=chrom, sample_bam_file=sample_bam_file, n_sec=n_sec, i_sec=i_sec, verbose=1)
+	GT_nonTR(vcf_in, vcf_out, contig=chrom, sample_bam_file=sample_bam_file, n_sec=n_sec, i_sec=i_sec, TR_file_TRF_target=TR_file_TRF_target, TR_file_TRF_all=TR_file_TRF_all, TR_file_RM_Simpe=TR_file_RM_Simpe, TR_file_MG=TR_file_MG, verbose=1)
 
 def run_tr(args):
 	tr_annot_file = args.tr_annot
@@ -804,6 +809,13 @@ if __name__ == '__main__':
 	parser_nontr.add_argument('-c', '--contig', default=None, help='contig name. If used the input VCF should be indexed')
 	parser_nontr.add_argument('-n', '--n_section', type=int, default=1, help='number of sections in the input VCF file')
 	parser_nontr.add_argument('-i', '--i_section', type=int, default=0, help='which section of the input VCF file to process')
+
+        # These files were hard-coded previously:
+	parser_nontr.add_argument('--TR_file_TRF_target', help='TRF target')
+	parser_nontr.add_argument('--TR_file_TRF_all', help='TRF all')
+	parser_nontr.add_argument('--TR_file_RM_Simpe', help='RM simpe')
+	parser_nontr.add_argument('--TR_file_MG', help='MG')
+
 	parser_nontr.set_defaults(func=run_nontr)
 
 	parser_tr = subparsers.add_parser('tr', help='process TR annotations')
