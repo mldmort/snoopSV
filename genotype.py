@@ -15,9 +15,6 @@ new_header_INFO = [
 '##INFO=<ID=SKIP_TR,Number=0,Type=Flag,Description="Skip this call for genotyping, since it falls into TR regions">',
 '##INFO=<ID=TR_ANNOT,Number=0,Type=Flag,Description="Tandem Repeat annotation genotyped, from genSV">',
 '##INFO=<ID=TR,Number=0,Type=Flag,Description="TR region, target for TR genotyping">',
-'##INFO=<ID=TR_TRF_OTHER,Number=0,Type=Flag,Description="TR region, in TRF track but not a target for genotyping">',
-'##INFO=<ID=TR_RM_SR,Number=0,Type=Flag,Description="TR region, in repeat masker track, not a target for genotyping">',
-'##INFO=<ID=TR_MG,Number=0,Type=Flag,Description="TR region, in Gymreklab targets, but not in TR targets for genotyping">',
 '##INFO=<ID=TR_REPEAT_LEN,Number=.,Type=String,Description="TR repeat length">',
 '##INFO=<ID=TR_REPEAT_SEQ,Number=.,Type=String,Description="TR repeat sequence">',
 '##INFO=<ID=TR_REPEAT_START,Number=.,Type=String,Description="TR repeat start">',
@@ -56,11 +53,6 @@ new_header_FORMAT = [
 '##FORMAT=<ID=CN_TR_BP_H2,Number=.,Type=String,Description="Counts of base pairs in TR region for H2, from genSV">',
 '##FORMAT=<ID=CN_TR_BP_H0,Number=.,Type=String,Description="Counts of base pairs in TR region for H0, from genSV">'
 ]
-#TR_file_TRF_target = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot_per-2-250.bed'
-TR_file_TRF_target = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot.bed'
-TR_file_TRF_all = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Simple_Repeats_TRF_annot.bed'
-TR_file_RM_Simpe = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/Repeats_Masker_Simple_repeat.bed'
-TR_file_MG = '/home/smmortazavi/HUMAN_DATA/REF/REPEATS/hg38_ver13.bed'
 
 skip_region_list = [\
 	{'chrom':'chr1', 'start':143150000, 'stop':149900000}, \
@@ -289,7 +281,7 @@ def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec,
 
 	fh_vcf_out.close()
 
-def GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1):
+def GT_nonTR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1):
 
 	### genotyping setting
 	mapping_quality_thr = 20
@@ -373,33 +365,15 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1):
 
 		this_line = chrom+'\t'+str(pos_start)+'\t'+str(pos_stop)
 		command1 = ('echo -e '+this_line).split(' ')
-		command_tar = 'bedtools intersect -a -'.split(' ') + ('-b '+TR_file_TRF_target+' -f 0.5 -wa -wb').split(' ') 
-		command_all = 'bedtools intersect -a -'.split(' ') + ('-b '+TR_file_TRF_all+' -f 0.5 -wa -wb').split(' ') 
-		command_rms = 'bedtools intersect -a -'.split(' ') + ('-b '+TR_file_RM_Simpe+' -f 0.5 -wa -wb').split(' ') 
-		command_mg = 'bedtools intersect -a -'.split(' ') + ('-b '+TR_file_MG+' -f 0.5 -wa -wb').split(' ') 
+		command_tar = 'bedtools intersect -a -'.split(' ') + ('-b '+tr_annot_file+' -f 0.5 -wa -wb').split(' ') 
 		#print('command1:', command1)
 		#print('command_tar:', command_tar)
-		#print('command_all:', command_all)
-		#print('command_rms:', command_rms)
-		#print('command_mg:', command_mg)
 
 		ps1 = subprocess.Popen(command1, stdout=subprocess.PIPE)
 		tr_tar_isecs = subprocess.run(command_tar, stdin=ps1.stdout, check=True, capture_output=True, text=True).stdout
-		ps1 = subprocess.Popen(command1, stdout=subprocess.PIPE)
-		tr_all_isecs = subprocess.run(command_all, stdin=ps1.stdout, check=True, capture_output=True, text=True).stdout
-		ps1 = subprocess.Popen(command1, stdout=subprocess.PIPE)
-		tr_rms_isecs = subprocess.run(command_rms, stdin=ps1.stdout, check=True, capture_output=True, text=True).stdout
-		ps1 = subprocess.Popen(command1, stdout=subprocess.PIPE)
-		tr_mg_isecs = subprocess.run(command_mg, stdin=ps1.stdout, check=True, capture_output=True, text=True).stdout
 		#print('tr_tar_isecs:', tr_tar_isecs)
-		#print('tr_all_isecs:', tr_all_isecs)
-		#print('tr_rms_isecs:', tr_rms_isecs)
-		#print('tr_mg_isecs:', tr_mg_isecs)
 
 		tr_tar_isecs = tr_tar_isecs.split('\n')[:-1] # the last one is always an empty string
-		tr_all_isecs = tr_all_isecs.split('\n')[:-1] # the last one is always an empty string
-		tr_rms_isecs = tr_rms_isecs.split('\n')[:-1] # the last one is always an empty string
-		tr_mg_isecs = tr_mg_isecs.split('\n')[:-1] # the last one is always an empty string
 		#print('tr_tar_isecs:', tr_tar_isecs)
 		#print('tr_all_isecs:', tr_all_isecs)
 		#print('tr_rms_isecs:', tr_rms_isecs)
@@ -416,8 +390,14 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1):
 				_, _, _, tr_isec_chrom, tr_isec_start, tr_isec_end, period_len, CN, period_seq = tr_isec.split('\t')
 				tr_start_list.append(int(tr_isec_start))
 				tr_end_list.append(int(tr_isec_end))
-				period_len_list.append(int(period_len))
-				CN_list.append(float(CN))
+				try:
+					period_len_list.append(int(period_len))
+				except:
+					period_len_list.append(period_len)
+				try:
+					CN_list.append(float(CN))
+				except:
+					CN_list.append(CN)
 				period_seq_list.append(period_seq)
 			#print('tr_start_list:', tr_start_list)
 			#print('tr_end_list:', tr_end_list)
@@ -434,13 +414,6 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1):
 			rec.info['TR_REPEAT_START'] = ','.join([str(x) for x in tr_start_list])
 			rec.info['TR_REPEAT_END'] = ','.join([str(x) for x in tr_end_list])
 			rec.info['TR_REPEAT_CN'] = ','.join([str(x) for x in CN_list])
-		if not TR_bool:
-			if len(tr_all_isecs)>0:
-				rec.info['TR_TRF_OTHER'] = True
-			if len(tr_rms_isecs)>0:
-				rec.info['TR_RM_SR'] = True
-			if len(tr_mg_isecs)>0:
-				rec.info['TR_MG'] = True
 
 		#**if TR_bool and (svtype=='INS' or svtype=='DEL'):
 		#**	count_skip_tr += 1
@@ -755,6 +728,7 @@ def SCORE_VCF(vcf_in, annot_in, cov_in, models, vcf_out):
 
 
 def run_nontr(args):
+	tr_annot_file = args.tr_annot
 	vcf_in = args.vcf_in
 	vcf_out = args.vcf_out
 	sample_bam_file = args.sample_bam_file
@@ -764,7 +738,7 @@ def run_nontr(args):
 	for x, y in args.__dict__.items():
 		print(x,':', y)
 
-	GT_nonTR(vcf_in, vcf_out, contig=chrom, sample_bam_file=sample_bam_file, n_sec=n_sec, i_sec=i_sec, verbose=1)
+	GT_nonTR(tr_annot_file, vcf_in, vcf_out, contig=chrom, sample_bam_file=sample_bam_file, n_sec=n_sec, i_sec=i_sec, verbose=1)
 
 def run_tr(args):
 	tr_annot_file = args.tr_annot
@@ -801,13 +775,14 @@ if __name__ == '__main__':
 	parser_nontr.add_argument('-v', '--vcf_in', required=True, help='input VCF file')
 	parser_nontr.add_argument('-o', '--vcf_out', required=True, help='output VCF file')
 	parser_nontr.add_argument('-s', '--sample_bam_file', required=True, help='a map between samples and bam files as a tab delimited text file. First column is the samples, and second column is the absolute path to the bam files')
+	parser_nontr.add_argument('-t', '--tr_annot', required=True, help='TR annotation file. Should be a tab delimited file with columns: tr_chrom, tr_start, tr_end, period length, copy number, period sequence. If you do not have any column information you should put dummy strings for them.')
 	parser_nontr.add_argument('-c', '--contig', default=None, help='contig name. If used the input VCF should be indexed')
 	parser_nontr.add_argument('-n', '--n_section', type=int, default=1, help='number of sections in the input VCF file')
 	parser_nontr.add_argument('-i', '--i_section', type=int, default=0, help='which section of the input VCF file to process')
 	parser_nontr.set_defaults(func=run_nontr)
 
 	parser_tr = subparsers.add_parser('tr', help='process TR annotations')
-	parser_tr.add_argument('-t', '--tr_annot', required=True, help='TR annotation file')
+	parser_tr.add_argument('-t', '--tr_annot', required=True, help='TR annotation file. Should be a tab delimited file with columns: tr_chrom, tr_start, tr_end, period length, copy number, period sequence. If you do not have any column information you should put dummy strings for them.')
 	parser_tr.add_argument('-v', '--vcf_in', required=True, help='dummy input VCF file to use for header')
 	parser_tr.add_argument('-o', '--vcf_out', required=True, help='output VCF file')
 	parser_tr.add_argument('-s', '--sample_bam_file', required=True, help='a map between samples and bam files as a tab delimited text file. First column is the samples, and second column is the absolute path to the bam files')
