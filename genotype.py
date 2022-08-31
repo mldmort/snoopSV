@@ -12,7 +12,6 @@ import pickle
 ### global variables
 new_header_INFO = [
 '##INFO=<ID=SKIP_REGION,Number=0,Type=Flag,Description="Skip this call for genotyping, since it falls into skipped regions">',
-'##INFO=<ID=SKIP_TR,Number=0,Type=Flag,Description="Skip this call for genotyping, since it falls into TR regions">',
 '##INFO=<ID=TR_ANNOT,Number=0,Type=Flag,Description="Tandem Repeat annotation genotyped, from genSV">',
 '##INFO=<ID=TR,Number=0,Type=Flag,Description="TR region, target for TR genotyping">',
 '##INFO=<ID=TR_REPEAT_LEN,Number=.,Type=String,Description="TR repeat length">',
@@ -321,7 +320,7 @@ def GT_nonTR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_s
 
 	count_skip_region = 0
 	count_skip_sec = 0
-	count_skip_tr = 0
+	#count_skip_tr = 0
 	for i_rec, rec in enumerate(fh_vcf_in.fetch(contig=contig)):
 		if (i_rec < i_rec_start) or (i_rec >= i_rec_end):
 			count_skip_sec += 1
@@ -502,7 +501,7 @@ def GT_nonTR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_s
 		print('Finished all variants')
 		print('count_skip_region:', count_skip_region)
 		print('count_skip_sec:', count_skip_sec)
-		print('count_skip_tr:', count_skip_tr)
+		#print('count_skip_tr:', count_skip_tr)
 
 	fh_vcf_in.close()
 	fh_vcf_out.close()
