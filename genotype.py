@@ -362,64 +362,6 @@ def GT_nonTR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_s
 			pos_start = target_sv.start
 			pos_stop = target_sv.start+1
 
-		this_line = chrom+'\t'+str(pos_start)+'\t'+str(pos_stop)
-		command1 = ('echo -e '+this_line).split(' ')
-		command_tar = 'bedtools intersect -a -'.split(' ') + ('-b '+tr_annot_file+' -f 0.5 -wa -wb').split(' ') 
-		#print('command1:', command1)
-		#print('command_tar:', command_tar)
-
-		ps1 = subprocess.Popen(command1, stdout=subprocess.PIPE)
-		tr_tar_isecs = subprocess.run(command_tar, stdin=ps1.stdout, check=True, capture_output=True, text=True).stdout
-		#print('tr_tar_isecs:', tr_tar_isecs)
-
-		tr_tar_isecs = tr_tar_isecs.split('\n')[:-1] # the last one is always an empty string
-		#print('tr_tar_isecs:', tr_tar_isecs)
-		#print('tr_all_isecs:', tr_all_isecs)
-		#print('tr_rms_isecs:', tr_rms_isecs)
-		#print('tr_mg_isecs:', tr_mg_isecs)
-
-		if len(tr_tar_isecs)>0:
-			TR_bool = True
-			tr_start_list = []
-			tr_end_list = []
-			period_len_list = []
-			CN_list = []
-			period_seq_list = []
-			for tr_isec in tr_tar_isecs:
-				_, _, _, tr_isec_chrom, tr_isec_start, tr_isec_end, period_len, CN, period_seq = tr_isec.split('\t')
-				tr_start_list.append(int(tr_isec_start))
-				tr_end_list.append(int(tr_isec_end))
-				try:
-					period_len_list.append(int(period_len))
-				except:
-					period_len_list.append(period_len)
-				try:
-					CN_list.append(float(CN))
-				except:
-					CN_list.append(CN)
-				period_seq_list.append(period_seq)
-			#print('tr_start_list:', tr_start_list)
-			#print('tr_end_list:', tr_end_list)
-			#print('period_len_list:', period_len_list)
-			#print('CN_list:', CN_list)
-			#print('period_seq_list:', period_seq_list)
-		else:
-			TR_bool = False
-
-		rec.info['TR'] = TR_bool
-		if TR_bool:
-			rec.info['TR_REPEAT_LEN'] = ','.join([str(x) for x in period_len_list])
-			rec.info['TR_REPEAT_SEQ'] = ','.join([str(x) for x in period_seq_list])
-			rec.info['TR_REPEAT_START'] = ','.join([str(x) for x in tr_start_list])
-			rec.info['TR_REPEAT_END'] = ','.join([str(x) for x in tr_end_list])
-			rec.info['TR_REPEAT_CN'] = ','.join([str(x) for x in CN_list])
-
-		#**if TR_bool and (svtype=='INS' or svtype=='DEL'):
-		#**	count_skip_tr += 1
-		#**	rec.info['SKIP_TR'] = True
-		#**	fh_vcf_out.write(rec)
-		#**	continue
-
 		for sample, bam_file in sample_bam_dict.items():
 			fh_bam = pysam.AlignmentFile(bam_file, 'rb')
 			read_supp_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()}
@@ -736,6 +678,8 @@ def run_nontr(args):
 	i_sec = args.i_section
 	for x, y in args.__dict__.items():
 		print(x,':', y)
+	if tr_annot_file != '':
+		print('WARN: tr annotation file provided as an input is NOT utilized in the nonTR genotyper for this version. TR annotation should be done after genotyping.')
 
 	GT_nonTR(tr_annot_file, vcf_in, vcf_out, contig=chrom, sample_bam_file=sample_bam_file, n_sec=n_sec, i_sec=i_sec, verbose=1)
 
@@ -774,7 +718,7 @@ if __name__ == '__main__':
 	parser_nontr.add_argument('-v', '--vcf_in', required=True, help='input VCF file')
 	parser_nontr.add_argument('-o', '--vcf_out', required=True, help='output VCF file')
 	parser_nontr.add_argument('-s', '--sample_bam_file', required=True, help='a map between samples and bam files as a tab delimited text file. First column is the samples, and second column is the absolute path to the bam files')
-	parser_nontr.add_argument('-t', '--tr_annot', required=True, help='TR annotation file. Should be a tab delimited file with columns: tr_chrom, tr_start, tr_end, period length, copy number, period sequence. If you do not have any column information you should put dummy strings for them.')
+	parser_nontr.add_argument('-t', '--tr_annot', required=False, help='TR annotation file. Should be a tab delimited file with columns: tr_chrom, tr_start, tr_end, period length, copy number, period sequence. If you do not have any column information you should put dummy strings for them.', default='')
 	parser_nontr.add_argument('-c', '--contig', default=None, help='contig name. If used the input VCF should be indexed')
 	parser_nontr.add_argument('-n', '--n_section', type=int, default=1, help='number of sections in the input VCF file')
 	parser_nontr.add_argument('-i', '--i_section', type=int, default=0, help='which section of the input VCF file to process')
