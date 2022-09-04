@@ -353,8 +353,11 @@ def GT_nonTR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_s
 		target_sv = sv_class(svtype, chrom, start, stop, chr2, svlen)
 
 		if svtype == 'INS':
-			pos_start = target_sv.start - 50
-			pos_stop = target_sv.stop + 49
+			#pos_start = target_sv.start - 50
+			#pos_stop = target_sv.stop + 49
+			# don't need to pad INS calls when we don't intersect calls with TRs
+			pos_start = target_sv.start
+			pos_stop = target_sv.stop
 		elif svtype != 'TRA':
 			pos_start = target_sv.start
 			pos_stop = target_sv.stop

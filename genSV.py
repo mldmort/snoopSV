@@ -581,7 +581,6 @@ def sv_signiture(read, target_sv):
 	if target_svtype == 'INS':
 		ref_pos_list = cigar_dict['I']['ref_pos']
 		ref_len_list = cigar_dict['I']['len']
-		sum_cigar_len = 0
 		for ind, ref_pos in enumerate(ref_pos_list):
 			if (ref_pos > region_buffer_left) and (ref_pos < region_buffer_right):
 				#ref_len_half = int(ref_len_list[ind] / 2)
@@ -593,17 +592,12 @@ def sv_signiture(read, target_sv):
 				#	CG_read_name = read.query_name
 				#	break
 				ref_len = ref_len_list[ind]
-				sum_cigar_len += ref_len
 				if float(abs(ref_len-target_svlen))/float(target_svlen) < len_ratio_tol:
 					CG_read_supp = True
 					CG_read_name = read.query_name
 					break
-		#if (not CG_read_supp) and (float(abs(sum_cigar_len-target_svlen))/float(target_svlen) < len_ratio_tol):
-		#	CG_read_supp = True
-		#	CG_read_name = read.query_name
 	elif target_svtype == 'DEL':
 		ref_pos_list = cigar_dict['D']['ref_pos']
-		sum_cigar_len = 0
 		for ref_pos_t in ref_pos_list:
 			ref_pos_start = ref_pos_t[0]
 			ref_pos_stop = ref_pos_t[1]
@@ -613,15 +607,6 @@ def sv_signiture(read, target_sv):
 					CG_read_supp = True
 					CG_read_name = read.query_name
 					break
-				#ref_len = ref_pos_stop - ref_pos_start
-				#sum_cigar_len += ref_len
-				#if float(abs(ref_len-target_svlen))/float(target_svlen) < len_ratio_tol:
-				#	CG_read_supp = True
-				#	CG_read_name = read.query_name
-				#	break
-		#if (not CG_read_supp) and (float(abs(sum_cigar_len-target_svlen))/float(target_svlen) < len_ratio_tol):
-		#	CG_read_supp = True
-		#	CG_read_name = read.query_name
 	elif target_svtype == 'DUP':
 		ref_pos_list = cigar_dict['I']['ref_pos']
 		ref_len_list = cigar_dict['I']['len']
@@ -633,7 +618,6 @@ def sv_signiture(read, target_sv):
 					CG_read_name = read.query_name
 					break
 
-	#chr22,36701741,-,1433S4788M248D24S,60,725;	
 	SA_next_right = {'SA_ref_start':-1, 'SA_ref_stop':-1, 'SA_read_start':1e15, 'SA_read_stop':1e15}
 	SA_next_left = {'SA_ref_start':-1, 'SA_ref_stop':-1, 'SA_read_start':-1, 'SA_read_stop':-1}
 	if read.has_tag("SA"):
@@ -753,6 +737,14 @@ def sv_signiture(read, target_sv):
 			elif target_svtype == 'INS':
 				sv_len = delta_read - delta_ref
 				if (ref_overlap < 30) and (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol):
+					SA_read_supp = True
+					SA_read_name = read.query_name
+					break
+				# check if the read has a DUP signal
+				sv_len = ref_overlap
+				if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol) and \
+					(   (float(abs(target_start - bp1_overlap)) < 100) or \
+						(float(abs(target_stop - bp2_overlap)) < 100) ):
 					SA_read_supp = True
 					SA_read_name = read.query_name
 					break
