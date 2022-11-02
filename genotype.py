@@ -29,6 +29,10 @@ new_header_FORMAT = [
 '##FORMAT=<ID=RR_M,Number=1,Type=Integer,Description="Number of reads around the breakpoints supporting the reference sequence, maternal, from genSV">',
 '##FORMAT=<ID=RV_N,Number=1,Type=Integer,Description="Number of reads supporting the variant sequence, not phased, from genSV">',
 '##FORMAT=<ID=RR_N,Number=1,Type=Integer,Description="Number of reads around the breakpoints supporting the reference sequence, not phased, from genSV">',
+'##FORMAT=<ID=RV_HF,Number=1,Type=Integer,Description="Number of reads supporting the variant sequence, HiFi reads, from genSV">',
+'##FORMAT=<ID=RR_HF,Number=1,Type=Integer,Description="Number of reads around the breakpoints supporting the reference sequence, HiFi reads, from genSV">',
+'##FORMAT=<ID=RV_LF,Number=1,Type=Integer,Description="Number of reads supporting the variant sequence, LoFi reads, from genSV">',
+'##FORMAT=<ID=RR_LF,Number=1,Type=Integer,Description="Number of reads around the breakpoints supporting the reference sequence, LoFi reads, from genSV">',
 '##FORMAT=<ID=GT_SV,Number=1,Type=String,Description="Genotype of the variant, from genSV">',
 '##FORMAT=<ID=GT_SV_PH,Number=1,Type=String,Description="phased genotype of the variant, from genSV">',
 '##FORMAT=<ID=GQ_SV,Number=1,Type=Integer,Description="Phred-scale genotype quality score, from genSV">',
@@ -371,6 +375,8 @@ def GT_nonTR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_s
 			read_supp_P_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### paternal
 			read_supp_M_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### maternal
 			read_supp_N_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### not phased
+			read_supp_HF_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### HiFi reads
+			read_supp_LF_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### LoFi reads
 
 			for i_read, read in enumerate(fh_bam.fetch(chrom, max(0,pos_start-region_buffer_length), pos_stop+region_buffer_length)):
 				if (not read.is_secondary) and (read.mapping_quality >= mapping_quality_thr):
@@ -394,6 +400,18 @@ def GT_nonTR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_s
 						read_supp_N_dict['locus_reads'].update([locus_read])
 						read_supp_N_dict['CG_supp'].update([CG_supp])
 						read_supp_N_dict['SA_supp'].update([SA_supp])
+					if read.has_tag('HF'):
+						HF = read.get_tag(tag='HF')
+						if HF == 1:
+							read_supp_HF_dict['locus_reads'].update([locus_read])
+							read_supp_HF_dict['CG_supp'].update([CG_supp])
+							read_supp_HF_dict['SA_supp'].update([SA_supp])
+						elif HF == 0:
+							read_supp_LF_dict['locus_reads'].update([locus_read])
+							read_supp_LF_dict['CG_supp'].update([CG_supp])
+							read_supp_LF_dict['SA_supp'].update([SA_supp])
+						else:
+							assert 0==1, 'problem with HF in read: ' + read.query_name
 			fh_bam.close()
 			read_supp_dict['locus_reads'] -= {''}
 			read_supp_dict['CG_supp'] -= {''}
@@ -407,6 +425,12 @@ def GT_nonTR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_s
 			read_supp_N_dict['locus_reads'] -= {''}
 			read_supp_N_dict['CG_supp'] -= {''}
 			read_supp_N_dict['SA_supp'] -= {''}
+			read_supp_HF_dict['locus_reads'] -= {''}
+			read_supp_HF_dict['CG_supp'] -= {''}
+			read_supp_HF_dict['SA_supp'] -= {''}
+			read_supp_LF_dict['locus_reads'] -= {''}
+			read_supp_LF_dict['CG_supp'] -= {''}
+			read_supp_LF_dict['SA_supp'] -= {''}
 			DV_s = len(read_supp_dict['CG_supp'] | read_supp_dict['SA_supp'])
 			DR_s = len(read_supp_dict['locus_reads']) - DV_s
 			assert DR_s >= 0, 'problem with DR/DV, DR: '+str(DR_s)+', DV: '+str(DV_s)+', sv_id: '+str(sv_id)
@@ -421,6 +445,12 @@ def GT_nonTR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_s
 			assert DR_s_N >= 0, 'problem with N DR/DV, DR: '+str(DR_s_N)+', DV: '+str(DV_s_N)+', sv_id: '+str(sv_id)
 			assert DV_s_P+DV_s_M+DV_s_N == DV_s, 'problem with P/M/N DV_s, DV_s_P: '+str(DV_s_P)+', DV_s_M: '+str(DV_s_M)+', DV_s_N: '+str(DV_s_N)+', DV_s: '+str(DV_s)
 			assert DR_s_P+DR_s_M+DR_s_N == DR_s, 'problem with P/M/N DR_s, DR_s_P: '+str(DR_s_P)+', DR_s_M: '+str(DR_s_M)+', DR_s_N: '+str(DR_s_N)+', DR_s: '+str(DR_s)
+			DV_s_HF = len(read_supp_HF_dict['CG_supp'] | read_supp_HF_dict['SA_supp'])
+			DR_s_HF = len(read_supp_HF_dict['locus_reads']) - DV_s_HF
+			assert DR_s_HF >= 0, 'problem with P DR/DV, DR: '+str(DR_s_HF)+', DV: '+str(DV_s_HF)+', sv_id: '+str(sv_id)
+			DV_s_LF = len(read_supp_LF_dict['CG_supp'] | read_supp_LF_dict['SA_supp'])
+			DR_s_LF = len(read_supp_LF_dict['locus_reads']) - DV_s_LF
+			assert DR_s_LF >= 0, 'problem with P DR/DV, DR: '+str(DR_s_LF)+', DV: '+str(DV_s_LF)+', sv_id: '+str(sv_id)
 			GT, GQ, p_11, p_01, p_00, SQ = infer_gt_sv(DR_s, DV_s, p_err=SV_p_err)
 			GT_PH = get_phased_gt(GT, DV_s_P, DV_s_M)
 			rec.samples[sample]['RV'] = DV_s
@@ -431,6 +461,10 @@ def GT_nonTR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_s
 			rec.samples[sample]['RR_M'] = DR_s_M
 			rec.samples[sample]['RV_N'] = DV_s_N
 			rec.samples[sample]['RR_N'] = DR_s_N
+			rec.samples[sample]['RV_HF'] = DV_s_HF
+			rec.samples[sample]['RR_HF'] = DR_s_HF
+			rec.samples[sample]['RV_LF'] = DV_s_LF
+			rec.samples[sample]['RR_LF'] = DR_s_LF
 			rec.samples[sample]['GT_SV'] = GT
 			rec.samples[sample]['GQ_SV'] = GQ
 			rec.samples[sample]['P_11'] = p_11
