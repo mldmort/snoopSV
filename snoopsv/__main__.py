@@ -82,3 +82,6 @@ def main():
 
 	### run the program
 	args.func(args)
+
+if __name__ == '__main__':
+	main()

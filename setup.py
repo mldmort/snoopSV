@@ -14,7 +14,7 @@ setup(
 	],
 	entry_points={
 		"console_scripts": [
-			"snoopsv = snoopsv.snoop:main"
+			"snoopsv = snoopsv.__main__:main"
 		],
 	},
 	classifiers=[
