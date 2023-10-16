@@ -10,12 +10,20 @@ This tool can be used to further inspect already called SVs (by an SV caller suc
 2. Mapped (optionally haplotagged) bam files for each sample.
 
 ## Installation
-Install with conda (or micromamba):
+Install with conda:
 ```
 git clone https://github.com/mldmort/snoopSV.git
 cd snoopSV
 conda env create -f requirements.txt -n <snoopsv>
 conda activate <snoopsv>
+make
+```
+Install with micromamba:
+```
+git clone https://github.com/mldmort/snoopSV.git
+cd snoopSV
+micromamba env create -n <snoopsv> python=3.10
+micromamba activate <snoopsv>
 make
 ```
 ## How to run snoopSV:
