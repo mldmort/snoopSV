@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://github.com/mldmort/snoopSV/blob/main/img/snoopsv.jpg" width="256" align="right"/>
+</p>
+
 # snoopSV
 This tool can be used to further inspect already called SVs (by an SV caller such as sniffles) from long read data, and add more information to the FORMAT feild. More information  includes:
 1. Number of reads supporting the variant.
