@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/mldmort/snoopSV/blob/main/img/snoopsv.jpg" width="256" align="right"/>
+  <img src="https://github.com/mldmort/snoopSV/blob/main/img/snoopSV.png" width="256" align="right"/>
 </p>
 
 # snoopSV
