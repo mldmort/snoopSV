@@ -18,10 +18,11 @@ def test_sv_del():
 	vcf_in = VCF_DEL
 	vcf_out = temp_dir.name + '/' + 'test_vcf_out.vcf'
 	contig = None
-	sample_bam_file = {'SAMPLE': BAM_INS_DEL_INV_DUP}
+	sample = 'SAMPLE'
+	bam = BAM_INS_DEL_INV_DUP
 	n_sec = 1
 	i_sec = 0
-	GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1)
+	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1)
 
 	vcf_fh = pysam.VariantFile(vcf_out)
 	for record in vcf_fh.fetch():
@@ -48,10 +49,11 @@ def test_sv_ins():
 	vcf_in = VCF_INS
 	vcf_out = temp_dir.name + '/' + 'test_vcf_out.vcf'
 	contig = None
-	sample_bam_file = {'SAMPLE': BAM_INS_DEL_INV_DUP}
+	sample = 'SAMPLE'
+	bam = BAM_INS_DEL_INV_DUP
 	n_sec = 1
 	i_sec = 0
-	GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1)
+	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1)
 
 	vcf_fh = pysam.VariantFile(vcf_out)
 	for record in vcf_fh.fetch():
@@ -81,10 +83,11 @@ def test_sv_dup():
 	vcf_in = VCF_INV
 	vcf_out = temp_dir.name + '/' + 'test_vcf_out.vcf'
 	contig = None
-	sample_bam_file = {'SAMPLE': BAM_INS_DEL_INV_DUP}
+	sample = 'SAMPLE'
+	bam = BAM_INS_DEL_INV_DUP
 	n_sec = 1
 	i_sec = 0
-	GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1)
+	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1)
 
 	vcf_fh = pysam.VariantFile(vcf_out)
 	print(vcf_fh)
@@ -111,10 +114,11 @@ def test_sv_inv():
 	vcf_in = VCF_INV
 	vcf_out = temp_dir.name + '/' + 'test_vcf_out.vcf'
 	contig = None
-	sample_bam_file = {'SAMPLE': BAM_INS_DEL_INV_DUP}
+	sample = 'SAMPLE'
+	bam = BAM_INS_DEL_INV_DUP
 	n_sec = 1
 	i_sec = 0
-	GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1)
+	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1)
 
 	vcf_fh = pysam.VariantFile(vcf_out)
 	for record in vcf_fh.fetch():
@@ -140,10 +144,11 @@ def test_sv_dup_large():
 	vcf_in = VCF_DUP_LARGE
 	vcf_out = temp_dir.name + '/' + 'test_vcf_out.vcf'
 	contig = None
-	sample_bam_file = {'SAMPLE': BAM_DUP_LARGE}
+	sample = 'SAMPLE'
+	bam = BAM_DUP_LARGE
 	n_sec = 1
 	i_sec = 0
-	GT_nonTR(vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec, verbose=1)
+	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1)
 
 	vcf_fh = pysam.VariantFile(vcf_out)
 	for record in vcf_fh.fetch():
