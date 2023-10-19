@@ -1,21 +1,29 @@
 
-def skip_region(chrom, start, stop):
+class skip_class(object):
 
-	skip_region_list = [\
-		{'chrom':'chr1', 'start':143150000, 'stop':149900000}, \
-		{'chrom':'chr16', 'start':46380000, 'stop':46425000}, \
-		{'chrom':'chr1', 'start':125060000, 'stop':125200000} \
-	]
-	if (chrom==skip_region_list[0]['chrom']) and ((start > skip_region_list[0]['start']) and (start < skip_region_list[0]['stop'])) and ((stop > skip_region_list[0]['start']) and (stop < skip_region_list[0]['stop'])):
-		return True
+	def __init__(self, bed=None):
+		self.region_list = []
+		if bed:
+			with open(bed, 'r') as fh:
+				for line in fh.read_lines():
+					line = line.strip().split('\t')
+					self.region_list.append({'chrom': line[0], 'start': line[1], 'stop': line[2]})
 
-	if (chrom==skip_region_list[1]['chrom']) and ((start > skip_region_list[1]['start']) and (start < skip_region_list[1]['stop'])) and ((stop > skip_region_list[1]['start']) and (stop < skip_region_list[1]['stop'])):
-		return True
+	def skip_region(self, chrom, start, stop):
 
-	if (chrom==skip_region_list[2]['chrom']) and ((start > skip_region_list[2]['start']) and (start < skip_region_list[2]['stop'])) and ((stop > skip_region_list[2]['start']) and (stop < skip_region_list[2]['stop'])):
-		return True
+		for region in self.region_list:
+			if chrom == region['chrom'] and start > region['start'] and stop < region['stop']:
+				return True
 
-	return False
+		return False
+
+	def __str__():
+		ret = []
+		tab = '\t'
+		for region in self.region_list[:10]:
+			ret.append(f"{tab.join([region['chrom'], region['start'], region['stop']])}")
+		ret.append('...')
+		return '\n'.join(ret)
 
 def get_cigar_dict(read, ins_len_thr, del_len_thr):
 	read_ref_start = read.reference_start
@@ -40,16 +48,16 @@ def get_cigar_dict(read, ins_len_thr, del_len_thr):
 	cur_ref_pos = read_ref_start
 	cur_seq_pos = 0
 	for c in cigar_t[ind_start:ind_end+1]:
-		if c[0] == 0 or c[0] == 7 or c[0] == 8:
+		if c[0] == 0 or c[0] == 7 or c[0] == 8: # M, =, X
 			cur_ref_pos += c[1]
 			cur_seq_pos += c[1]
-		elif c[0] == 1:
+		elif c[0] == 1: # I
 			if c[1] >= ins_len_thr:
 				cigar_dict['I']['ref_pos'].append(cur_ref_pos)
 				cigar_dict['I']['seq_pos'].append((cur_seq_pos, cur_seq_pos+c[1]))
 				cigar_dict['I']['len'].append(c[1])
 			cur_seq_pos += c[1]
-		elif c[0] == 2:
+		elif c[0] == 2: # D
 			if c[1] >= del_len_thr:
 				cigar_dict['D']['ref_pos'].append((cur_ref_pos, cur_ref_pos+c[1]))
 			cur_ref_pos += c[1]

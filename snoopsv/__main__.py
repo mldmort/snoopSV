@@ -11,10 +11,18 @@ def run_nontr(args):
 	chrom = args.contig
 	n_sec = args.n_section
 	i_sec = args.i_section
+	skip_bed = args.skip_bed
+	mapping_quality_thr = args.mapping_quality_thr
+	buffer_length = args.buffer_length
+	p_err = args.p_err
+	len_ratio_tol = args.len_ratio_tol
+	ins_len_thr = args.ins_len_thr
+	del_len_thr = args.del_len_thr
+	del_recip_overlap_thr = args.del_recip_overlap_thr
 	for x, y in args.__dict__.items():
 		print(x,':', y)
 
-	GT_nonTR(vcf_in, vcf_out, contig=chrom, sample=sample, bam=bam, n_sec=n_sec, i_sec=i_sec, verbose=1)
+	GT_nonTR(vcf_in, vcf_out, contig=chrom, sample=sample, bam=bam, n_sec=n_sec, i_sec=i_sec, skip_bed=skip_bed, mapping_quality_thr=mapping_quality_thr, buffer_length=buffer_length, p_err=p_err, len_ratio_tol=len_ratio_tol, ins_len_thr=ins_len_thr, del_len_thr=del_len_thr, del_recip_overlap_thr=del_recip_overlap_thr, verbose=1)
 
 def run_tr(args):
 	tr_annot_file = args.tr_annot
@@ -54,6 +62,14 @@ def main():
 	parser_nontr.add_argument('-c', '--contig', default=None, help='contig name. If used, the input VCF index should exist')
 	parser_nontr.add_argument('-n', '--n_section', type=int, default=1, help='split the input VCF file into this number of sections')
 	parser_nontr.add_argument('-i', '--i_section', type=int, default=0, help='which section of the input VCF file to process')
+	parser_nontr.add_argument('--skip-bed', default=None, help='skip analyzing calls intersecting with this bed file')
+	parser_nontr.add_argument('--mapping-quality-thr', default=20, type=int, help='minimum mapping quality for a read to be considered')
+	parser_nontr.add_argument('--buffer-length', default=500, type=int, help='number of base pairs to look for reads around an sv')
+	parser_nontr.add_argument('--p-err', default=0.01, type=float, help='error probability in sv genotyping model')
+	parser_nontr.add_argument('--len-ratio-tol', default=0.25, type=float, help='tolerance for difference between observed sv length in a read and reported sv length in the input vcf to pass the read as supporting')
+	parser_nontr.add_argument('--ins-len-thr', default=20, type=int, help='minimum insertion length in CIGAR to be considered')
+	parser_nontr.add_argument('--del-len-thr', default=20, type=int, help='minimum deletion length in CIGAR to be considered')
+	parser_nontr.add_argument('--del-recip-overlap-thr', default=0.3, type=float, help='minimum reciprocal overlap between detected and reported deletions to be considered as supporting')
 	parser_nontr.set_defaults(func=run_nontr)
 
 	parser_tr = subparsers.add_parser('tr', help='process TR annotations')

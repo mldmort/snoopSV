@@ -1,6 +1,6 @@
 import pysam
 import subprocess
-from snoopsv.utils import skip_region
+from snoopsv.utils import skip_class
 from snoopsv.utils_tr import tr_signature_3, infer_gt_tr_phased 
 from snoopsv.utils_vcf import add_header_lines
 
@@ -81,7 +81,8 @@ def GT_TR(tr_annot_file, vcf_in, vcf_out, contig, sample_bam_file, n_sec, i_sec,
 		rec.info['TR_REPEAT_CN'] = str(CN)
 		rec.info['TR_ANNOT'] = True
 
-		if skip_region(tr_chrom, tr_start, tr_end):
+		skip = skip_class(skip_bed)
+		if skip.skip_region(chrom, start, stop):
 			count_skip_region += 1
 			rec.info['SKIP_REGION'] = True
 			fh_vcf_out.write(rec)

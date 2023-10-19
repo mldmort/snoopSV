@@ -1,23 +1,20 @@
 import pysam
 import subprocess
-from snoopsv.utils import skip_region
-from snoopsv.utils_sv import sv_class, sv_signature, infer_gt_sv, get_phased_gt
+from snoopsv.utils import skip_class
+from snoopsv.utils_sv import sv_class, infer_gt_sv, get_phased_gt
 from snoopsv.utils_vcf import add_header_lines
 from pathlib import Path
 
-def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1):
+def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mapping_quality_thr, buffer_length, p_err, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr, verbose=1):
 
-	### genotyping setting
-	mapping_quality_thr = 20
-	region_buffer_length = 500
-	SV_p_err = 0.01
-
+	# count the number of variants to be processed
 	if contig:
-		command = ('bcftools query -r '+contig+' -f %CHROM\\n '+vcf_in).split()
+		command = ('bcftools query -r ' + contig + ' -f %CHROM\\n ' + vcf_in).split()
 	else:
-		command = ('bcftools query -f %CHROM\\n '+vcf_in).split()
+		command = ('bcftools query -f %CHROM\\n ' + vcf_in).split()
 	ps = subprocess.Popen(command, stdout=subprocess.PIPE)
 	n_calls = int(subprocess.run(['wc', '-l'], stdin=ps.stdout, check=True, capture_output=True, text=True).stdout)
+
 	### i_sec should go from 0 to n_sec to cover all calls
 	i_rec_start = i_sec * int(n_calls / n_sec)
 	i_rec_end = (i_sec + 1) * int(n_calls / n_sec)
@@ -31,8 +28,9 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1):
 		print('i_rec_end:', i_rec_end)
 
 	fh_vcf_in = pysam.VariantFile(vcf_in)
+	add_header_lines(fh_vcf_in.header)
 	fh_vcf_out = pysam.VariantFile(vcf_out, mode='w', header=fh_vcf_in.header)
-	add_header_lines(fh_vcf_out.header)
+	# after the next few lines output header have sample but input header does not
 	if sample not in fh_vcf_out.header.samples:
 		print(f'Adding sample: {sample} to the output VCF')
 		fh_vcf_out.header.add_sample(sample)
@@ -45,26 +43,29 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1):
 		if (i_rec < i_rec_start) or (i_rec >= i_rec_end):
 			count_skip_sec += 1
 			continue
-		new_rec = fh_vcf_out.header.new_record(contig=rec.chrom, start=rec.start, stop=rec.stop, alleles=rec.alleles,
-											   id=rec.id, qual=rec.qual, filter=rec.filter, info=rec.info)
-		if sample in fh_vcf_in.header.samples:
-			for item in rec.samples[sample]:
-				new_rec.samples[sample][item] = rec.samples[sample][item]
-		sv_id = rec.id
-		svtype = rec.info['SVTYPE']
-		svlen = rec.info['SVLEN']
-		chrom = rec.chrom
-		start = rec.start
-		stop = rec.stop
-		if svtype == 'TRA':
-			chr2 = rec.info['CHR2']
-		else:
-			chr2 = chrom
+		# if sample is not in the input header we need to create a new record to add the sample.
+		# we cannot add a new sample to a fetched record, and we cannot set fields of a new sample either (ValueError).
+		if sample not in fh_vcf_in.header.samples:
+			new_rec = fh_vcf_out.header.new_record(contig=rec.chrom, start=rec.start, stop=rec.stop, alleles=rec.alleles,
+												   id=rec.id, qual=rec.qual, filter=rec.filter, info=rec.info)
+			rec = new_rec
 
-		if skip_region(chrom, start, stop):
+		target_sv = sv_class(rec, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr)
+
+		chrom = target_sv.chrom
+		start = target_sv.start
+		stop = target_sv.stop
+		sv_id = target_sv.id
+		svtype = target_sv.svtype
+		svlen = target_sv.svlen
+		chr2 = target_sv.chr2
+		pos2 = target_sv.pos2
+
+		skip = skip_class(skip_bed)
+		if skip.skip_region(chrom, start, stop):
 			count_skip_region += 1
-			new_rec.info['SKIP_REGION'] = True
-			fh_vcf_out.write(new_rec)
+			rec.info['SKIP_REGION'] = True
+			fh_vcf_out.write(rec)
 			continue
 
 		#print('svtype:', svtype)
@@ -75,20 +76,6 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1):
 		#print('stop:', stop)
 		#print('sv_id:', sv_id)
 		#print('rec.samples:', rec.samples)
-		target_sv = sv_class(rec)
-
-		if svtype == 'INS':
-			#pos_start = target_sv.start - 50
-			#pos_stop = target_sv.stop + 49
-			# don't need to pad INS calls when we don't intersect calls with TRs
-			pos_start = target_sv.start
-			pos_stop = target_sv.stop
-		elif svtype != 'TRA':
-			pos_start = target_sv.start
-			pos_stop = target_sv.stop
-		else:
-			pos_start = target_sv.start
-			pos_stop = target_sv.start+1
 
 		read_supp_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()}
 		read_supp_P_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### paternal
@@ -97,9 +84,11 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1):
 		read_supp_HF_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### HiFi reads
 		read_supp_LF_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### LoFi reads
 
-		for i_read, read in enumerate(fh_bam.fetch(chrom, max(0,pos_start-region_buffer_length), pos_stop+region_buffer_length)):
+		for read in fh_bam.fetch(chrom,
+								 max(0, target_sv.start - buffer_length),
+							     target_sv.stop + buffer_length):
 			if (not read.is_secondary) and (read.mapping_quality >= mapping_quality_thr):
-				locus_read, CG_supp, SA_supp = sv_signature(read, target_sv)
+				locus_read, CG_supp, SA_supp = target_sv.sv_signature(read, mapping_quality_thr, buffer_length)
 				read_supp_dict['locus_reads'].update([locus_read])
 				read_supp_dict['CG_supp'].update([CG_supp])
 				read_supp_dict['SA_supp'].update([SA_supp])
@@ -114,7 +103,7 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1):
 						read_supp_M_dict['CG_supp'].update([CG_supp])
 						read_supp_M_dict['SA_supp'].update([SA_supp])
 					else:
-						assert 0==1, 'problem with HP in read: ' + read.query_name
+						raise NameError(f'problem with HP in read: {read.query_name}')
 				else:
 					read_supp_N_dict['locus_reads'].update([locus_read])
 					read_supp_N_dict['CG_supp'].update([CG_supp])
@@ -170,30 +159,30 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1):
 		DV_s_LF = len(read_supp_LF_dict['CG_supp'] | read_supp_LF_dict['SA_supp'])
 		DR_s_LF = len(read_supp_LF_dict['locus_reads']) - DV_s_LF
 		assert DR_s_LF >= 0, 'problem with P DR/DV, DR: '+str(DR_s_LF)+', DV: '+str(DV_s_LF)+', sv_id: '+str(sv_id)
-		GT, GQ, p_11, p_01, p_00, SQ = infer_gt_sv(DR_s, DV_s, p_err=SV_p_err)
+		GT, GQ, p_11, p_01, p_00, SQ = infer_gt_sv(DR_s, DV_s, p_err=p_err)
 		GT_PH = get_phased_gt(GT, DV_s_P, DV_s_M)
-		new_rec.samples[sample]['RV'] = DV_s
-		new_rec.samples[sample]['RR'] = DR_s
-		new_rec.samples[sample]['RV_P'] = DV_s_P
-		new_rec.samples[sample]['RR_P'] = DR_s_P
-		new_rec.samples[sample]['RV_M'] = DV_s_M
-		new_rec.samples[sample]['RR_M'] = DR_s_M
-		new_rec.samples[sample]['RV_N'] = DV_s_N
-		new_rec.samples[sample]['RR_N'] = DR_s_N
-		new_rec.samples[sample]['RV_HF'] = DV_s_HF
-		new_rec.samples[sample]['RR_HF'] = DR_s_HF
-		new_rec.samples[sample]['RV_LF'] = DV_s_LF
-		new_rec.samples[sample]['RR_LF'] = DR_s_LF
-		new_rec.samples[sample]['GT_SV'] = GT
-		new_rec.samples[sample]['GQ_SV'] = GQ
-		new_rec.samples[sample]['P_11'] = p_11
-		new_rec.samples[sample]['P_01'] = p_01
-		new_rec.samples[sample]['P_00'] = p_00
-		new_rec.samples[sample]['SQ_SV'] = SQ
-		new_rec.samples[sample]['GT_SV_PH'] = GT_PH
+		rec.samples[sample]['RV'] = DV_s
+		rec.samples[sample]['RR'] = DR_s
+		rec.samples[sample]['RV_P'] = DV_s_P
+		rec.samples[sample]['RR_P'] = DR_s_P
+		rec.samples[sample]['RV_M'] = DV_s_M
+		rec.samples[sample]['RR_M'] = DR_s_M
+		rec.samples[sample]['RV_N'] = DV_s_N
+		rec.samples[sample]['RR_N'] = DR_s_N
+		rec.samples[sample]['RV_HF'] = DV_s_HF
+		rec.samples[sample]['RR_HF'] = DR_s_HF
+		rec.samples[sample]['RV_LF'] = DV_s_LF
+		rec.samples[sample]['RR_LF'] = DR_s_LF
+		rec.samples[sample]['GT_SV'] = GT
+		rec.samples[sample]['GQ_SV'] = GQ
+		rec.samples[sample]['P_11'] = p_11
+		rec.samples[sample]['P_01'] = p_01
+		rec.samples[sample]['P_00'] = p_00
+		rec.samples[sample]['SQ_SV'] = SQ
+		rec.samples[sample]['GT_SV_PH'] = GT_PH
 		#print('DV_s:', DV_s, 'DR_s:', DR_s, 'GT:', GT, 'GQ:', GQ, 'p_00:', p_00, 'p_01:', p_01, 'p_11:', p_11)
 
-		fh_vcf_out.write(new_rec)
+		fh_vcf_out.write(rec)
 
 	if verbose == 1:
 		print('Finished all variants')

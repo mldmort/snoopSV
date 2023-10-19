@@ -13,6 +13,16 @@ VCF_DUP = str(DATA_DIR.joinpath('Ecoli_simulated_DUP.sorted.vcf.gz'))
 VCF_INV = str(DATA_DIR.joinpath('Ecoli_simulated_INV.sorted.vcf.gz'))
 VCF_DUP_LARGE= str(DATA_DIR.joinpath('Ecoli_simulated_DUP_large.sorted.vcf.gz'))
 
+skip_bed = None
+mapping_quality_thr = 20
+buffer_length = 500
+p_err = 0.01
+len_ratio_tol = 0.25
+ins_len_thr = 20
+del_len_thr = 20
+del_recip_overlap_thr = 0.3
+extra_params = (skip_bed, mapping_quality_thr, buffer_length, p_err, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr)
+
 def test_sv_del():
 	temp_dir = tempfile.TemporaryDirectory()
 	vcf_in = VCF_DEL
@@ -22,7 +32,7 @@ def test_sv_del():
 	bam = BAM_INS_DEL_INV_DUP
 	n_sec = 1
 	i_sec = 0
-	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1)
+	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, *extra_params, verbose=1)
 
 	vcf_fh = pysam.VariantFile(vcf_out)
 	for record in vcf_fh.fetch():
@@ -53,7 +63,7 @@ def test_sv_ins():
 	bam = BAM_INS_DEL_INV_DUP
 	n_sec = 1
 	i_sec = 0
-	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1)
+	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, *extra_params, verbose=1)
 
 	vcf_fh = pysam.VariantFile(vcf_out)
 	for record in vcf_fh.fetch():
@@ -87,7 +97,7 @@ def test_sv_dup():
 	bam = BAM_INS_DEL_INV_DUP
 	n_sec = 1
 	i_sec = 0
-	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1)
+	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, *extra_params, verbose=1)
 
 	vcf_fh = pysam.VariantFile(vcf_out)
 	print(vcf_fh)
@@ -118,7 +128,7 @@ def test_sv_inv():
 	bam = BAM_INS_DEL_INV_DUP
 	n_sec = 1
 	i_sec = 0
-	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1)
+	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, *extra_params, verbose=1)
 
 	vcf_fh = pysam.VariantFile(vcf_out)
 	for record in vcf_fh.fetch():
@@ -148,7 +158,7 @@ def test_sv_dup_large():
 	bam = BAM_DUP_LARGE
 	n_sec = 1
 	i_sec = 0
-	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, verbose=1)
+	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, *extra_params, verbose=1)
 
 	vcf_fh = pysam.VariantFile(vcf_out)
 	for record in vcf_fh.fetch():
