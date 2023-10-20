@@ -19,10 +19,11 @@ def run_nontr(args):
 	ins_len_thr = args.ins_len_thr
 	del_len_thr = args.del_len_thr
 	del_recip_overlap_thr = args.del_recip_overlap_thr
+	bnd_pos_tol = args.bnd_pos_tol
 	for x, y in args.__dict__.items():
 		print(x,':', y)
 
-	GT_nonTR(vcf_in, vcf_out, contig=chrom, sample=sample, bam=bam, n_sec=n_sec, i_sec=i_sec, skip_bed=skip_bed, mapping_quality_thr=mapping_quality_thr, buffer_length=buffer_length, p_err=p_err, len_ratio_tol=len_ratio_tol, ins_len_thr=ins_len_thr, del_len_thr=del_len_thr, del_recip_overlap_thr=del_recip_overlap_thr, verbose=1)
+	GT_nonTR(vcf_in, vcf_out, contig=chrom, sample=sample, bam=bam, n_sec=n_sec, i_sec=i_sec, skip_bed=skip_bed, mapping_quality_thr=mapping_quality_thr, buffer_length=buffer_length, p_err=p_err, len_ratio_tol=len_ratio_tol, ins_len_thr=ins_len_thr, del_len_thr=del_len_thr, del_recip_overlap_thr=del_recip_overlap_thr, bnd_pos_tol=bnd_pos_tol, verbose=1)
 
 def run_tr(args):
 	tr_annot_file = args.tr_annot
@@ -70,6 +71,7 @@ def main():
 	parser_nontr.add_argument('--ins-len-thr', default=20, type=int, help='minimum insertion length in CIGAR to be considered')
 	parser_nontr.add_argument('--del-len-thr', default=20, type=int, help='minimum deletion length in CIGAR to be considered')
 	parser_nontr.add_argument('--del-recip-overlap-thr', default=0.3, type=float, help='minimum reciprocal overlap between detected and reported deletions to be considered as supporting')
+	parser_nontr.add_argument('--bnd-pos-tol', default=50, type=int, help='tolerance for breakend location in base pairs')
 	parser_nontr.set_defaults(func=run_nontr)
 
 	parser_tr = subparsers.add_parser('tr', help='process TR annotations')

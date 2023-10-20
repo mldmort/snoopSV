@@ -3,12 +3,13 @@ from snoopsv.utils import get_cigar_dict, calc_recip_overlap
 
 class sv_class:
 
-	def __init__(self, rec, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr):
+	def __init__(self, rec, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr, bnd_pos_tol):
 
 		self.len_ratio_tol = len_ratio_tol
 		self.ins_len_thr = ins_len_thr
 		self.del_len_thr = del_len_thr
 		self.del_recip_overlap_thr = del_recip_overlap_thr
+		self.bnd_pos_tol = bnd_pos_tol
 
 		self.id = rec.id
 		self.chrom = rec.chrom
@@ -41,16 +42,29 @@ class sv_class:
 				chr2_pos2 = rec.alts[0].split('[')[1] # always second member, both N[... and [...
 				chr2_pos2 = chr2_pos2.split(':')
 				assert chr2_pos2[0] == self.chr2, f'problem with parsing alt in BND call, sv id: {sv_id}'
-				self.pos2 = chr2_pos2[1]
+				self.pos2 = int(chr2_pos2[1])
 			elif ']' in rec.alts[0]:
 				chr2_pos2 = rec.alts[0].split(']')[1] # always second member, both N]... and ]...
 				chr2_pos2 = chr2_pos2.split(':')
 				assert chr2_pos2[0] == self.chr2, f'problem with parsing alt in BND call, sv id: {sv_id}'
-				self.pos2 = chr2_pos2[1]
+				self.pos2 = int(chr2_pos2[1])
 			else:
 				raise NameError(f'[ or ] not found in alt column of BND svtype, for sv id: {sv_id}')
 		else:
 			self.pos2 = None
+
+	def __str__(self):
+		ret = (f'++++++++++++++++++++\n'
+			   f'id: {self.id}\n'
+			   f'chrom: {self.chrom}\n'
+			   f'start: {self.start}\n'
+			   f'stop: {self.stop}\n'
+			   f'svtype: {self.svtype}\n'
+			   f'svlen: {self.svlen}\n'
+			   f'chr2: {self.chr2}\n'
+			   f'pos2: {self.pos2}\n'
+			   f'====================')
+		return ret
 
 	def sv_len_pass(self, proposed_len, target_svlen):
 		if abs(proposed_len - target_svlen) / target_svlen < self.len_ratio_tol:
@@ -97,10 +111,10 @@ class sv_class:
 	# this is a generator function going over the SA tag variables
 	def get_sa_variables(self, read, mapping_quality_thr):
 		#print(f'read name: {read.query_name}, sv type: {self.svtype}, sv start: {self.start}')
-		SA_next_right = {'SA_ref_start':-1, 'SA_ref_stop':-1, 'SA_read_start':1e15, 'SA_read_stop':1e15}
-		SA_next_left = {'SA_ref_start':-1, 'SA_ref_stop':-1, 'SA_read_start':-1, 'SA_read_stop':-1}
-		if read.has_tag("SA"):
-			SA_tag = read.get_tag(tag="SA")
+		SA_next_right = {'SA_chrom': None, 'SA_strand': None, 'SA_ref_start': -1, 'SA_ref_stop': -1, 'SA_read_start': 1e15, 'SA_read_stop': 1e15}
+		SA_next_left = {'SA_chrom': None, 'SA_strand': None, 'SA_ref_start': -1, 'SA_ref_stop': -1, 'SA_read_start': -1, 'SA_read_stop': -1}
+		if read.has_tag('SA'):
+			SA_tag = read.get_tag(tag='SA')
 			SA_list = SA_tag.split(';')[:-1]
 			for SA in SA_list:
 				SA = SA.split(',')
@@ -119,10 +133,10 @@ class sv_class:
 					continue
 				if ((self.svtype == 'DEL') or (self.svtype == 'INS')) and (SA_strand != self.read_strand):
 					continue
-				if (self.svtype == 'TRA') and (SA_chrom == self.read_chrom):
-					continue
-				if (self.svtype != 'TRA') and (SA_chrom != self.read_chrom):
-					continue
+				#if (self.svtype == 'TRA') and (SA_chrom == self.read_chrom):
+				#	continue
+				#if (self.svtype != 'TRA') and (SA_chrom != self.read_chrom):
+				#	continue
 				if (self.svtype == 'INV') and (SA_strand == self.read_strand):
 					continue
 
@@ -215,17 +229,29 @@ class sv_class:
 					SA_next_right['SA_read_stop'] = SA_read_stop
 					SA_next_right['SA_ref_start'] = SA_ref_start
 					SA_next_right['SA_ref_stop'] = SA_ref_stop
+					SA_next_right['SA_chrom'] = SA_chrom
+					SA_next_right['SA_strand'] = SA_strand
 				if (SA_read_start < self.read_al_start) and (SA_read_start > SA_next_left['SA_read_start']): # SA is left of read
 					SA_next_left['SA_read_start'] = SA_read_start
 					SA_next_left['SA_read_stop'] = SA_read_stop
 					SA_next_left['SA_ref_start'] = SA_ref_start
 					SA_next_left['SA_ref_stop'] = SA_ref_stop
+					SA_next_left['SA_chrom'] = SA_chrom
+					SA_next_left['SA_strand'] = SA_strand
 
-				yield SA_strand, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, SA_next_left, SA_next_right
+				yield SA_strand, SA_chrom, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, SA_next_left, SA_next_right
 		else:
-			yield tuple([None] * 8)
+			yield tuple([None] * 9)
 
 	def ins_signature(self, read, mapping_quality_thr):
+		'''
+		this method is searching for insertion signature and
+		sets these parameters:
+		- self.CG_read_supp
+		- self.CG_read_name
+		- self.SA_read_supp
+		- self.SA_read_name
+		'''
 		# from CIGAR
 		pos_list = self.cigar_dict['I']['ref_pos']
 		len_list = self.cigar_dict['I']['len']
@@ -238,7 +264,7 @@ class sv_class:
 					break
 
 		# from supplementary alignments
-		for SA_strand, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, SA_next_left, SA_next_right in self.get_sa_variables(read, mapping_quality_thr):
+		for SA_strand, SA_chrom, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, SA_next_left, SA_next_right in self.get_sa_variables(read, mapping_quality_thr):
 			if SA_strand == None:
 				break
 			proposed_len = delta_read - delta_ref
@@ -256,6 +282,14 @@ class sv_class:
 				break
 
 	def del_signature(self, read, mapping_quality_thr):
+		'''
+		this method is searching for deletion signature and
+		sets these parameters:
+		- self.CG_read_supp
+		- self.CG_read_name
+		- self.SA_read_supp
+		- self.SA_read_name
+		'''
 		# from CIGAR
 		ref_pos_list = self.cigar_dict['D']['ref_pos']
 		for ref_pos_t in ref_pos_list:
@@ -269,7 +303,7 @@ class sv_class:
 					break
 
 		# from supplementary alignments
-		for SA_strand, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, SA_next_left, SA_next_right in self.get_sa_variables(read, mapping_quality_thr):
+		for SA_strand, SA_chrom, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, SA_next_left, SA_next_right in self.get_sa_variables(read, mapping_quality_thr):
 			if SA_strand == None:
 				break
 			proposed_len = delta_ref - delta_read
@@ -279,6 +313,14 @@ class sv_class:
 				break
 
 	def dup_signature(self, read, mapping_quality_thr):
+		'''
+		this method is searching for duplication signature and
+		sets these parameters:
+		- self.CG_read_supp
+		- self.CG_read_name
+		- self.SA_read_supp
+		- self.SA_read_name
+		'''
 		# from CIGAR
 		pos_list = self.cigar_dict['I']['ref_pos']
 		len_list = self.cigar_dict['I']['len']
@@ -291,7 +333,7 @@ class sv_class:
 					break
 
 		# from supplementary alignments
-		for SA_strand, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, SA_next_left, SA_next_right in self.get_sa_variables(read, mapping_quality_thr):
+		for SA_strand, SA_chrom, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, SA_next_left, SA_next_right in self.get_sa_variables(read, mapping_quality_thr):
 			if SA_strand == None:
 				break
 			if (self.read_strand == SA_strand):
@@ -307,16 +349,24 @@ class sv_class:
 					break
 
 	def inv_signature(self, read, mapping_quality_thr):
+		'''
+		this method is searching for inversion signature and
+		sets these parameters:
+		- self.CG_read_supp
+		- self.CG_read_name
+		- self.SA_read_supp
+		- self.SA_read_name
+		'''
 		SA_next_left = None
 		SA_next_right = None
 		# we just need SA_next_left and SA_next_right after going through all the supplementary alignments
-		for SA_strand, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, this_SA_next_left, this_SA_next_right in self.get_sa_variables(read, mapping_quality_thr):
+		for SA_strand, SA_chrom, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, this_SA_next_left, this_SA_next_right in self.get_sa_variables(read, mapping_quality_thr):
 			SA_next_left = this_SA_next_left
 			SA_next_right = this_SA_next_right
 		if SA_next_left == None:
 			return
 
-		### read has a right SA
+		# read has a right SA
 		if (SA_next_right['SA_ref_start'] != -1):
 			if self.read_strand == '+':
 				breakpoint1 = self.read_ref_stop
@@ -329,7 +379,7 @@ class sv_class:
 		else:
 			min_bp_right = -1
 			max_bp_right = 1e15
-		### read has a left SA
+		# read has a left SA
 		if (SA_next_left['SA_ref_start'] != -1):
 			if self.read_strand == '+':
 				breakpoint1 = self.read_ref_start
@@ -352,8 +402,77 @@ class sv_class:
 				self.SA_read_supp = True
 				self.SA_read_name = read.query_name
 
-	def bnd_signature(self, read):
-		pass
+	def bnd_signature(self, read, mapping_quality_thr):
+		'''
+		this method is searching for breakend signature and
+		sets these parameters:
+		- self.CG_read_supp
+		- self.CG_read_name
+		- self.SA_read_supp
+		- self.SA_read_name
+		'''
+		# from supplementary alignments
+		SA_next_left = None
+		SA_next_right = None
+		# we just need SA_next_left and SA_next_right after going through all the supplementary alignments
+		for SA_strand, SA_chrom, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, this_SA_next_left, this_SA_next_right in self.get_sa_variables(read, mapping_quality_thr):
+			SA_next_left = this_SA_next_left
+			SA_next_right = this_SA_next_right
+
+		#this_sv_id = 'Sniffles2.BND.B37S0'
+		#this_rd_id = 'm64278e_210903_184900/75039160/ccs'
+		#if (self.id == this_sv_id and read.query_name == this_rd_id):
+		#	print(f'read name: {read.query_name}')
+		#	print(f'SA_next_left: {SA_next_left}')
+		#	print(f'SA_next_right: {SA_next_right}')
+		#	print('+++++++++++++++++++++++++++')
+
+		if SA_next_left == None: # this read did not have any SA tag
+			return
+
+		#print(f'read name: {read.query_name}')
+		#print(f'SA_next_left: {SA_next_left}')
+		#print(f'SA_next_right: {SA_next_right}')
+
+		# read has a right SA with right mapped chrom
+		if (SA_next_right['SA_ref_start'] != -1 and SA_next_right['SA_chrom'] == self.chr2):
+			if self.read_strand == '+':
+				breakpoint1 = self.read_ref_stop
+			else:
+				breakpoint1 = self.read_ref_start
+			if SA_next_right['SA_strand'] == '+':
+				breakpoint2 = SA_next_right['SA_ref_start']
+			else:
+				breakpoint2 = SA_next_right['SA_ref_stop']
+			#if (self.id == this_sv_id and read.query_name == this_rd_id):
+			#	print(f'read_strand: {self.read_strand}, SA_strand: {SA_next_right["SA_strand"]}')
+			#	print(f'breakpoint1: {breakpoint1}')
+			#	print(f'breakpoint2: {breakpoint2}')
+			#	print(f'start: {self.start}, pos2: {self.pos2}, bnd_pos_tol: {self.bnd_pos_tol}')
+			if (abs(breakpoint1 - self.start) < self.bnd_pos_tol and
+				abs(breakpoint2 - self.pos2) < self.bnd_pos_tol):
+					self.SA_read_supp = True
+					self.SA_read_name = read.query_name
+
+		# read has a left SA with right mapped chrom
+		if (SA_next_left['SA_ref_start'] != -1  and SA_next_left['SA_chrom'] == self.chr2):
+			if self.read_strand == '+':
+				breakpoint1 = self.read_ref_start
+			else:
+				breakpoint1 = self.read_ref_stop
+			if SA_next_left['SA_strand'] == '+':
+				breakpoint2 = SA_next_left['SA_ref_stop']
+			else:
+				breakpoint2 = SA_next_left['SA_ref_start']
+			#if (self.id == this_sv_id and read.query_name == this_rd_id):
+			#	print(f'read_strand: {self.read_strand}, SA_strand: {SA_next_left["SA_strand"]}')
+			#	print(f'breakpoint1: {breakpoint1}')
+			#	print(f'breakpoint2: {breakpoint2}')
+			#	print(f'start: {self.start}, pos2: {self.pos2}, bnd_pos_tol: {self.bnd_pos_tol}')
+			if (abs(breakpoint1 - self.start) < self.bnd_pos_tol and
+				abs(breakpoint2 - self.pos2) < self.bnd_pos_tol):
+					self.SA_read_supp = True
+					self.SA_read_name = read.query_name
 
 	def sv_signature(self, read, mapping_quality_thr, buffer_length):
 

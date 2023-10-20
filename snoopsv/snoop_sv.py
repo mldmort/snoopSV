@@ -5,7 +5,7 @@ from snoopsv.utils_sv import sv_class, infer_gt_sv, get_phased_gt
 from snoopsv.utils_vcf import add_header_lines
 from pathlib import Path
 
-def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mapping_quality_thr, buffer_length, p_err, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr, verbose=1):
+def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mapping_quality_thr, buffer_length, p_err, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr, bnd_pos_tol, verbose=1):
 
 	# count the number of variants to be processed
 	if contig:
@@ -50,7 +50,7 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mappi
 												   id=rec.id, qual=rec.qual, filter=rec.filter, info=rec.info)
 			rec = new_rec
 
-		target_sv = sv_class(rec, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr)
+		target_sv = sv_class(rec, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr, bnd_pos_tol)
 
 		chrom = target_sv.chrom
 		start = target_sv.start
