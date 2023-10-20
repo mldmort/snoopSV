@@ -110,7 +110,6 @@ class sv_class:
 
 	# this is a generator function going over the SA tag variables
 	def get_sa_variables(self, read, mapping_quality_thr):
-		#print(f'read name: {read.query_name}, sv type: {self.svtype}, sv start: {self.start}')
 		SA_next_right = {'SA_chrom': None, 'SA_strand': None, 'SA_ref_start': -1, 'SA_ref_stop': -1, 'SA_read_start': 1e15, 'SA_read_stop': 1e15}
 		SA_next_left = {'SA_chrom': None, 'SA_strand': None, 'SA_ref_start': -1, 'SA_ref_stop': -1, 'SA_read_start': -1, 'SA_read_stop': -1}
 		if read.has_tag('SA'):
@@ -128,7 +127,7 @@ class sv_class:
 				#print('SA_cigar:', SA_cigar)
 				#print('SA_mapq:', SA_mapq)
 
-				#### don't consider SA if:
+				# don't yield this SA if:
 				if (SA_mapq < mapping_quality_thr):
 					continue
 				if ((self.svtype == 'DEL') or (self.svtype == 'INS')) and (SA_strand != self.read_strand):
@@ -239,9 +238,17 @@ class sv_class:
 					SA_next_left['SA_chrom'] = SA_chrom
 					SA_next_left['SA_strand'] = SA_strand
 
-				yield SA_strand, SA_chrom, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, SA_next_left, SA_next_right
-		else:
-			yield tuple([None] * 9)
+				sa_params = {'SA_strand': SA_strand,
+							'SA_chrom': SA_chrom,
+							'delta_read': delta_read,
+							'delta_ref': delta_ref,
+							'ref_overlap': ref_overlap,
+							'bp1_overlap': bp1_overlap,
+							'bp2_overlap': bp2_overlap,
+							'SA_next_left': SA_next_left,
+							'SA_next_right': SA_next_right,
+							}
+				yield sa_params
 
 	def ins_signature(self, read, mapping_quality_thr):
 		'''
@@ -264,9 +271,13 @@ class sv_class:
 					break
 
 		# from supplementary alignments
-		for SA_strand, SA_chrom, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, SA_next_left, SA_next_right in self.get_sa_variables(read, mapping_quality_thr):
-			if SA_strand == None:
-				break
+		for sa_params in self.get_sa_variables(read, mapping_quality_thr):
+			SA_strand = sa_params['SA_strand']
+			delta_read = sa_params['delta_read']
+			delta_ref = sa_params['delta_ref']
+			ref_overlap = sa_params['ref_overlap']
+			bp1_overlap = sa_params['bp1_overlap']
+			bp2_overlap = sa_params['bp2_overlap']
 			proposed_len = delta_read - delta_ref
 			if (ref_overlap < 30) and self.sv_len_pass(proposed_len, self.svlen):
 				self.SA_read_supp = True
@@ -303,9 +314,11 @@ class sv_class:
 					break
 
 		# from supplementary alignments
-		for SA_strand, SA_chrom, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, SA_next_left, SA_next_right in self.get_sa_variables(read, mapping_quality_thr):
-			if SA_strand == None:
-				break
+		for sa_params in self.get_sa_variables(read, mapping_quality_thr):
+			SA_strand = sa_params['SA_strand']
+			delta_read = sa_params['delta_read']
+			delta_ref = sa_params['delta_ref']
+			ref_overlap = sa_params['ref_overlap']
 			proposed_len = delta_ref - delta_read
 			if (ref_overlap < 30) and self.sv_len_pass(proposed_len, self.svlen):
 				self.SA_read_supp = True
@@ -333,9 +346,11 @@ class sv_class:
 					break
 
 		# from supplementary alignments
-		for SA_strand, SA_chrom, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, SA_next_left, SA_next_right in self.get_sa_variables(read, mapping_quality_thr):
-			if SA_strand == None:
-				break
+		for sa_params in self.get_sa_variables(read, mapping_quality_thr):
+			SA_strand = sa_params['SA_strand']
+			ref_overlap = sa_params['ref_overlap']
+			bp1_overlap = sa_params['bp1_overlap']
+			bp2_overlap = sa_params['bp2_overlap']
 			if (self.read_strand == SA_strand):
 				proposed_len = ref_overlap
 				#if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol) and \
@@ -360,12 +375,19 @@ class sv_class:
 		SA_next_left = None
 		SA_next_right = None
 		# we just need SA_next_left and SA_next_right after going through all the supplementary alignments
-		for SA_strand, SA_chrom, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, this_SA_next_left, this_SA_next_right in self.get_sa_variables(read, mapping_quality_thr):
-			SA_next_left = this_SA_next_left
-			SA_next_right = this_SA_next_right
+		for sa_params in self.get_sa_variables(read, mapping_quality_thr):
+			SA_next_left = sa_params['SA_next_left']
+			SA_next_right = sa_params['SA_next_right']
 		if SA_next_left == None:
 			return
 
+		#this_sv_id = 'Sniffles2.INV.86S0'
+		#if (self.id == this_sv_id):
+		#	print(f'read name: {read.query_name}')
+		#	print(f'SA_next_left: {SA_next_left}')
+		#	print(f'SA_next_right: {SA_next_right}')
+		#	print('+++++++++++++++++++++++++++')
+		
 		# read has a right SA
 		if (SA_next_right['SA_ref_start'] != -1):
 			if self.read_strand == '+':
@@ -415,9 +437,9 @@ class sv_class:
 		SA_next_left = None
 		SA_next_right = None
 		# we just need SA_next_left and SA_next_right after going through all the supplementary alignments
-		for SA_strand, SA_chrom, delta_read, delta_ref, ref_overlap, bp1_overlap, bp2_overlap, this_SA_next_left, this_SA_next_right in self.get_sa_variables(read, mapping_quality_thr):
-			SA_next_left = this_SA_next_left
-			SA_next_right = this_SA_next_right
+		for sa_params in self.get_sa_variables(read, mapping_quality_thr):
+			SA_next_left = sa_params['SA_next_left']
+			SA_next_right = sa_params['SA_next_right']
 
 		#this_sv_id = 'Sniffles2.BND.B37S0'
 		#this_rd_id = 'm64278e_210903_184900/75039160/ccs'

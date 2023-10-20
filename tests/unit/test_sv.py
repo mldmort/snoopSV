@@ -21,7 +21,8 @@ len_ratio_tol = 0.25
 ins_len_thr = 20
 del_len_thr = 20
 del_recip_overlap_thr = 0.3
-extra_params = (skip_bed, mapping_quality_thr, buffer_length, p_err, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr)
+bnd_pos_tol = 50
+extra_params = (skip_bed, mapping_quality_thr, buffer_length, p_err, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr, bnd_pos_tol)
 
 def test_sv_del():
 	temp_dir = tempfile.TemporaryDirectory()
