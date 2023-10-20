@@ -29,27 +29,23 @@ class sv_class:
 		else:
 			self.svlen = None
 
-		if self.svtype in ('BND', 'TRA'):
-			try:
-				self.chr2 = rec.info['CHR2']
-			except ValueError:
-				raise ValueError(f'CHR2 is not defined for id: {rec.id}. Check the VCF file!')
-		else:
-			self.chr2 = self.chrom
-
+		self.chr2 = self.chrom # for non BND svtypes
 		if self.svtype == 'BND':
+			if 'CHR2' in rec.info:
+				self.chr2 = rec.info['CHR2']
 			if '[' in rec.alts[0]:
 				chr2_pos2 = rec.alts[0].split('[')[1] # always second member, both N[... and [...
 				chr2_pos2 = chr2_pos2.split(':')
-				assert chr2_pos2[0] == self.chr2, f'problem with parsing alt in BND call, sv id: {sv_id}'
+				self.chr2 = chr2_pos2[0]
 				self.pos2 = int(chr2_pos2[1])
 			elif ']' in rec.alts[0]:
 				chr2_pos2 = rec.alts[0].split(']')[1] # always second member, both N]... and ]...
 				chr2_pos2 = chr2_pos2.split(':')
-				assert chr2_pos2[0] == self.chr2, f'problem with parsing alt in BND call, sv id: {sv_id}'
+				self.chr2 = chr2_pos2[0]
 				self.pos2 = int(chr2_pos2[1])
 			else:
 				raise NameError(f'[ or ] not found in alt column of BND svtype, for sv id: {sv_id}')
+			assert self.chr2 != self.chrom, f'problem with parsing chr2: {self.chr2}, chrom: {self.chrom}, sv id: {sv_id}'
 		else:
 			self.pos2 = None
 
