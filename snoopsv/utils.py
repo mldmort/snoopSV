@@ -5,9 +5,9 @@ class skip_class(object):
 		self.region_list = []
 		if bed:
 			with open(bed, 'r') as fh:
-				for line in fh.read_lines():
+				for line in fh.readlines():
 					line = line.strip().split('\t')
-					self.region_list.append({'chrom': line[0], 'start': line[1], 'stop': line[2]})
+					self.region_list.append({'chrom': line[0], 'start': int(line[1]), 'stop': int(line[2])})
 
 	def skip_region(self, chrom, start, stop):
 
