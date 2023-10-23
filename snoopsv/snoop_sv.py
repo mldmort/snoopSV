@@ -90,15 +90,22 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mappi
 		read_supp_P_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### paternal
 		read_supp_M_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### maternal
 		read_supp_N_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### not phased
-		read_supp_HF_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### HiFi reads
-		read_supp_LF_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### LoFi reads
 
-		for read in itertools.chain(fh_bam.fetch(chrom,
-										max(0, target_sv.start - buffer_length),
-										target_sv.start + buffer_length),
-									fh_bam.fetch(chrom,
-										max(0, target_sv.stop - buffer_length),
-										target_sv.stop + buffer_length)):
+		if svlen != None and abs(svlen) > 10000:
+			# we have two fetches here
+			iter1 = fh_bam.fetch(chrom,
+								 max(0, target_sv.start - buffer_length),
+								 target_sv.start + buffer_length)
+			iter2 = fh_bam.fetch(chrom,
+								 max(0, target_sv.stop - buffer_length),
+								 target_sv.stop + buffer_length)
+		else:
+			# we have one fetch here
+			iter1 = fh_bam.fetch(chrom,
+								 max(0, target_sv.start - buffer_length),
+								 target_sv.stop + buffer_length)
+			iter2 = iter(())
+		for read in itertools.chain(iter1, iter2):
 			if (not read.is_secondary) and (read.mapping_quality >= mapping_quality_thr):
 				locus_read, CG_supp, SA_supp = target_sv.sv_signature(read, mapping_quality_thr, buffer_length)
 				read_supp_dict['locus_reads'].update([locus_read])
@@ -120,18 +127,6 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mappi
 					read_supp_N_dict['locus_reads'].update([locus_read])
 					read_supp_N_dict['CG_supp'].update([CG_supp])
 					read_supp_N_dict['SA_supp'].update([SA_supp])
-				if read.has_tag('HF'):
-					HF = read.get_tag(tag='HF')
-					if HF == 1:
-						read_supp_HF_dict['locus_reads'].update([locus_read])
-						read_supp_HF_dict['CG_supp'].update([CG_supp])
-						read_supp_HF_dict['SA_supp'].update([SA_supp])
-					elif HF == 0:
-						read_supp_LF_dict['locus_reads'].update([locus_read])
-						read_supp_LF_dict['CG_supp'].update([CG_supp])
-						read_supp_LF_dict['SA_supp'].update([SA_supp])
-					else:
-						assert 0==1, 'problem with HF in read: ' + read.query_name
 
 		read_supp_dict['locus_reads'] -= {''}
 		read_supp_dict['CG_supp'] -= {''}
@@ -145,12 +140,6 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mappi
 		read_supp_N_dict['locus_reads'] -= {''}
 		read_supp_N_dict['CG_supp'] -= {''}
 		read_supp_N_dict['SA_supp'] -= {''}
-		read_supp_HF_dict['locus_reads'] -= {''}
-		read_supp_HF_dict['CG_supp'] -= {''}
-		read_supp_HF_dict['SA_supp'] -= {''}
-		read_supp_LF_dict['locus_reads'] -= {''}
-		read_supp_LF_dict['CG_supp'] -= {''}
-		read_supp_LF_dict['SA_supp'] -= {''}
 		DV_s = len(read_supp_dict['CG_supp'] | read_supp_dict['SA_supp'])
 		DR_s = len(read_supp_dict['locus_reads']) - DV_s
 		assert DR_s >= 0, 'problem with DR/DV, DR: '+str(DR_s)+', DV: '+str(DV_s)+', sv_id: '+str(sv_id)
@@ -165,12 +154,6 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mappi
 		assert DR_s_N >= 0, 'problem with N DR/DV, DR: '+str(DR_s_N)+', DV: '+str(DV_s_N)+', sv_id: '+str(sv_id)
 		assert DV_s_P+DV_s_M+DV_s_N == DV_s, 'problem with P/M/N DV_s, DV_s_P: '+str(DV_s_P)+', DV_s_M: '+str(DV_s_M)+', DV_s_N: '+str(DV_s_N)+', DV_s: '+str(DV_s)
 		assert DR_s_P+DR_s_M+DR_s_N == DR_s, 'problem with P/M/N DR_s, DR_s_P: '+str(DR_s_P)+', DR_s_M: '+str(DR_s_M)+', DR_s_N: '+str(DR_s_N)+', DR_s: '+str(DR_s)
-		DV_s_HF = len(read_supp_HF_dict['CG_supp'] | read_supp_HF_dict['SA_supp'])
-		DR_s_HF = len(read_supp_HF_dict['locus_reads']) - DV_s_HF
-		assert DR_s_HF >= 0, 'problem with P DR/DV, DR: '+str(DR_s_HF)+', DV: '+str(DV_s_HF)+', sv_id: '+str(sv_id)
-		DV_s_LF = len(read_supp_LF_dict['CG_supp'] | read_supp_LF_dict['SA_supp'])
-		DR_s_LF = len(read_supp_LF_dict['locus_reads']) - DV_s_LF
-		assert DR_s_LF >= 0, 'problem with P DR/DV, DR: '+str(DR_s_LF)+', DV: '+str(DV_s_LF)+', sv_id: '+str(sv_id)
 		GT, GQ, p_11, p_01, p_00, SQ = infer_gt_sv(DR_s, DV_s, p_err=p_err)
 		GT_PH = get_phased_gt(GT, DV_s_P, DV_s_M)
 		rec.samples[sample]['RV'] = DV_s
@@ -181,10 +164,6 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mappi
 		rec.samples[sample]['RR_M'] = DR_s_M
 		rec.samples[sample]['RV_N'] = DV_s_N
 		rec.samples[sample]['RR_N'] = DR_s_N
-		rec.samples[sample]['RV_HF'] = DV_s_HF
-		rec.samples[sample]['RR_HF'] = DR_s_HF
-		rec.samples[sample]['RV_LF'] = DV_s_LF
-		rec.samples[sample]['RR_LF'] = DR_s_LF
 		rec.samples[sample]['GT_SV'] = GT
 		rec.samples[sample]['GQ_SV'] = GQ
 		rec.samples[sample]['P_11'] = p_11
