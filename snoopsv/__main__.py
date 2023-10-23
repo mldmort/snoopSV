@@ -1,4 +1,5 @@
 import argparse
+import sys
 from snoopsv.snoop_sv import GT_nonTR
 from snoopsv.snoop_tr import GT_TR
 from snoopsv.snoop_score import SCORE_VCF
@@ -24,6 +25,7 @@ def run_nontr(args):
 	exclude_svtype = args.exclude_svtype
 	for x, y in args.__dict__.items():
 		print(x,':', y)
+	sys.stdout.flush()
 
 	GT_nonTR(vcf_in, vcf_out, contig=chrom, sample=sample, bam=bam, n_sec=n_sec, i_sec=i_sec, skip_bed=skip_bed, mapping_quality_thr=mapping_quality_thr, buffer_length=buffer_length, p_err=p_err, len_ratio_tol=len_ratio_tol, ins_len_thr=ins_len_thr, del_len_thr=del_len_thr, del_recip_overlap_thr=del_recip_overlap_thr, bnd_pos_tol=bnd_pos_tol, verbose=1, include_svtype=include_svtype, exclude_svtype=exclude_svtype)
 
@@ -39,6 +41,7 @@ def run_tr(args):
 	r_min = args.r_min
 	for x, y in args.__dict__.items():
 		print(x,':', y)
+	sys.stdout.flush()
 
 	GT_TR(tr_annot_file=tr_annot_file, vcf_in=vcf_in, vcf_out=vcf_out, contig=chrom, sample_bam_file=sample_bam_file, n_sec=n_sec, i_sec=i_sec, tr_span_max=tr_span_max, r_min=r_min, verbose=1)
 

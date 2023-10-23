@@ -5,6 +5,7 @@ from snoopsv.utils_sv import sv_class, infer_gt_sv, get_phased_gt
 from snoopsv.utils_vcf import add_header_lines
 from pathlib import Path
 import itertools
+import sys
 
 def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mapping_quality_thr, buffer_length, p_err, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr, bnd_pos_tol, verbose=1, include_svtype=None, exclude_svtype=None):
 
@@ -43,6 +44,7 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mappi
 	count_skip_region = 0
 	count_skip_sec = 0
 	count_skip_svtype = 0
+	sys.stdout.flush()
 	for i_rec, rec in enumerate(fh_vcf_in.fetch(contig=contig)):
 		if (i_rec < i_rec_start) or (i_rec >= i_rec_end):
 			count_skip_sec += 1
