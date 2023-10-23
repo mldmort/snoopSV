@@ -4,6 +4,7 @@ from snoopsv.utils import skip_class
 from snoopsv.utils_sv import sv_class, infer_gt_sv, get_phased_gt
 from snoopsv.utils_vcf import add_header_lines
 from pathlib import Path
+import itertools
 
 def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mapping_quality_thr, buffer_length, p_err, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr, bnd_pos_tol, verbose=1, include_svtype=None, exclude_svtype=None):
 
@@ -37,6 +38,8 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mappi
 
 	fh_bam = pysam.AlignmentFile(bam, 'rb')
 
+	skip = skip_class(skip_bed)
+
 	count_skip_region = 0
 	count_skip_sec = 0
 	count_skip_svtype = 0
@@ -62,7 +65,6 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mappi
 		chr2 = target_sv.chr2
 		pos2 = target_sv.pos2
 
-		skip = skip_class(skip_bed)
 		if skip.skip_region(chrom, start, stop):
 			count_skip_region += 1
 			rec.info['SKIP_REGION'] = True
@@ -91,9 +93,12 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mappi
 		read_supp_HF_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### HiFi reads
 		read_supp_LF_dict = {'locus_reads':set(), 'CG_supp':set(), 'SA_supp':set()} ### LoFi reads
 
-		for read in fh_bam.fetch(chrom,
-								 max(0, target_sv.start - buffer_length),
-							     target_sv.stop + buffer_length):
+		for read in itertools.chain(fh_bam.fetch(chrom,
+										max(0, target_sv.start - buffer_length),
+										target_sv.start + buffer_length),
+									fh_bam.fetch(chrom,
+										max(0, target_sv.stop - buffer_length),
+										target_sv.stop + buffer_length)):
 			if (not read.is_secondary) and (read.mapping_quality >= mapping_quality_thr):
 				locus_read, CG_supp, SA_supp = target_sv.sv_signature(read, mapping_quality_thr, buffer_length)
 				read_supp_dict['locus_reads'].update([locus_read])
