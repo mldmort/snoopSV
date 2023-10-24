@@ -24,8 +24,14 @@ class sv_class:
 		if self.svtype not in ('BND', 'TRA'):
 			try:
 				self.svlen = abs(rec.info['SVLEN'])
-			except ValueError:
-				raise ValueError(f'SVLEN is not defined for id: {rec.id}. Check the VCF file!')
+			except KeyError:
+				raise KeyError(f'SVLEN is not defined for id: {rec.id}. Check the VCF file!')
+			except TypeError:
+				if isinstance(rec.info['SVLEN'], tuple):
+					assert len(rec.info['SVLEN']) == 1
+					self.svlen = rec.info['SVLEN'][0]
+				else:
+					raise TypeError(f'problem with SVLEN. rec.info["SVLEN"]: {rec.info["SVLEN"]}, rec.id: {rec.id}')
 		else:
 			self.svlen = None
 
@@ -44,8 +50,8 @@ class sv_class:
 				self.chr2 = chr2_pos2[0]
 				self.pos2 = int(chr2_pos2[1])
 			else:
-				raise NameError(f'[ or ] not found in alt column of BND svtype, for sv id: {sv_id}')
-			assert self.chr2 != self.chrom, f'problem with parsing chr2: {self.chr2}, chrom: {self.chrom}, sv id: {sv_id}'
+				raise NameError(f'[ or ] not found in alt column of BND svtype, for sv id: {self.id}')
+			#assert self.chr2 != self.chrom, f'problem with parsing chr2: {self.chr2}, chrom: {self.chrom}, sv id: {self.id}'
 		else:
 			self.pos2 = None
 
