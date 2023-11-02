@@ -7,7 +7,7 @@ from pathlib import Path
 import itertools
 import sys
 
-def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mapping_quality_thr, buffer_length, p_err, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr, bnd_pos_tol, verbose=1, include_svtype=None, exclude_svtype=None):
+def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mapping_quality_thr, buffer_length, p_err, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr, bnd_pos_tol, verbose=1, include_svtype=None, exclude_svtype=None, exclude_contig=None):
 
 	# count the number of variants to be processed
 	if contig:
@@ -44,6 +44,7 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mappi
 	count_skip_region = 0
 	count_skip_sec = 0
 	count_skip_svtype = 0
+	count_skip_contig = 0
 	sys.stdout.flush()
 	for i_rec, rec in enumerate(fh_vcf_in.fetch(contig=contig)):
 		if (i_rec < i_rec_start) or (i_rec >= i_rec_end):
@@ -76,6 +77,11 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mappi
 		if ((include_svtype != None and svtype not in include_svtype) or
 			(exclude_svtype != None and svtype in exclude_svtype)):
 			count_skip_svtype += 1
+			fh_vcf_out.write(rec)
+			continue
+
+		if (exclude_contig != None and chrom in exclude_contig):
+			count_skip_contig += 1
 			fh_vcf_out.write(rec)
 			continue
 
@@ -182,6 +188,7 @@ def GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, skip_bed, mappi
 		print('count_skip_region:', count_skip_region)
 		print('count_skip_sec:', count_skip_sec)
 		print('count_skip_svtype:', count_skip_svtype)
+		print('count_skip_contig:', count_skip_contig)
 	fh_bam.close()
 	fh_vcf_in.close()
 	fh_vcf_out.close()

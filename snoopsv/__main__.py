@@ -23,11 +23,12 @@ def run_nontr(args):
 	bnd_pos_tol = args.bnd_pos_tol
 	include_svtype = args.include_svtype
 	exclude_svtype = args.exclude_svtype
+	exclude_contig = args.exclude_contig
 	for x, y in args.__dict__.items():
 		print(x,':', y)
 	sys.stdout.flush()
 
-	GT_nonTR(vcf_in, vcf_out, contig=chrom, sample=sample, bam=bam, n_sec=n_sec, i_sec=i_sec, skip_bed=skip_bed, mapping_quality_thr=mapping_quality_thr, buffer_length=buffer_length, p_err=p_err, len_ratio_tol=len_ratio_tol, ins_len_thr=ins_len_thr, del_len_thr=del_len_thr, del_recip_overlap_thr=del_recip_overlap_thr, bnd_pos_tol=bnd_pos_tol, verbose=1, include_svtype=include_svtype, exclude_svtype=exclude_svtype)
+	GT_nonTR(vcf_in, vcf_out, contig=chrom, sample=sample, bam=bam, n_sec=n_sec, i_sec=i_sec, skip_bed=skip_bed, mapping_quality_thr=mapping_quality_thr, buffer_length=buffer_length, p_err=p_err, len_ratio_tol=len_ratio_tol, ins_len_thr=ins_len_thr, del_len_thr=del_len_thr, del_recip_overlap_thr=del_recip_overlap_thr, bnd_pos_tol=bnd_pos_tol, verbose=1, include_svtype=include_svtype, exclude_svtype=exclude_svtype, exclude_contig=exclude_contig)
 
 def run_tr(args):
 	tr_annot_file = args.tr_annot
@@ -79,6 +80,7 @@ def main():
 	parser_nontr.add_argument('--bnd-pos-tol', default=50, type=int, help='tolerance for breakend location in base pairs')
 	parser_nontr.add_argument('--include-svtype', default=None, type=str, nargs='*', help='space separated svtypes you want to include')
 	parser_nontr.add_argument('--exclude-svtype', default=None, type=str, nargs='*', help='space separated svtypes you want to exclude')
+	parser_nontr.add_argument('--exclude-contig', default=None, type=str, nargs='*', help='contig names to exclude from processing.')
 	parser_nontr.set_defaults(func=run_nontr)
 
 	parser_tr = subparsers.add_parser('tr', help='process TR annotations')
