@@ -567,7 +567,7 @@ def infer_gt_sv(DR, DV, p_err):
 	p_G = 1./3.
 	p_D = (p_D_00 + p_D_01 + p_D_11)*p_G
 	if p_D == 0:
-		return 'NA', 0, 0, 0, 0, 0
+		return './.', 0, 0, 0, 0, 0
 		#print('p_D_00:', p_D_00)
 		#print('p_D_01:', p_D_01)
 		#print('p_D_11:', p_D_11)
