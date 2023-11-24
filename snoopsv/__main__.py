@@ -76,7 +76,7 @@ def main():
 	parser_nontr.add_argument('--len-ratio-tol', default=0.25, type=float, help='tolerance for difference between observed sv length in a read and reported sv length in the input vcf to pass the read as supporting')
 	parser_nontr.add_argument('--ins-len-thr', default=20, type=int, help='minimum insertion length in CIGAR to be considered')
 	parser_nontr.add_argument('--del-len-thr', default=20, type=int, help='minimum deletion length in CIGAR to be considered')
-	parser_nontr.add_argument('--del-recip-overlap-thr', default=0.3, type=float, help='minimum reciprocal overlap between detected and reported deletions to be considered as supporting')
+	parser_nontr.add_argument('--del-recip-overlap-thr', default=0.8, type=float, help='minimum reciprocal overlap between detected and reported deletions to be considered as supporting')
 	parser_nontr.add_argument('--bnd-pos-tol', default=50, type=int, help='tolerance for breakend location in base pairs')
 	parser_nontr.add_argument('--include-svtype', default=None, type=str, nargs='*', help='space separated svtypes you want to include')
 	parser_nontr.add_argument('--exclude-svtype', default=None, type=str, nargs='*', help='space separated svtypes you want to exclude')

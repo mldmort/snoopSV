@@ -44,7 +44,7 @@ def get_cigar_dict(read, ins_len_thr, del_len_thr):
 			break
 	assert ind_start != -1, 'wrong ind_start '+str(cigar_t)
 	assert ind_end != -1, 'wrong ind_end '+str(cigar_t) 
-	cigar_dict = {'I':{'ref_pos':[], 'len':[], 'seq_pos':[]}, 'D':{'ref_pos':[]}}
+	cigar_dict = {'I':{'ref_pos':[], 'len':[], 'seq_pos':[]}, 'D':{'ref_pos':[], 'seq_pos':[]}}
 	cur_ref_pos = read_ref_start
 	cur_seq_pos = 0
 	for c in cigar_t[ind_start:ind_end+1]:
@@ -60,13 +60,57 @@ def get_cigar_dict(read, ins_len_thr, del_len_thr):
 		elif c[0] == 2: # D
 			if c[1] >= del_len_thr:
 				cigar_dict['D']['ref_pos'].append((cur_ref_pos, cur_ref_pos+c[1]))
+				cigar_dict['D']['seq_pos'].append(cur_seq_pos)
 			cur_ref_pos += c[1]
 	assert cur_ref_pos == read_ref_stop, 'something wrong with CIGAR length addition, cur_ref_pos: '+str(cur_ref_pos)+', read_ref_stop: '+str(read_ref_stop)
 	assert cur_seq_pos == read_al_stop-read_al_start, 'something wrong with CIGAR length addition, cur_seq_pos: '+str(cur_seq_pos)+', read_al_stop-read_al_start: '+str(read_al_stop-read_al_start)
 
 	return cigar_dict, ind_start, ind_end
 
+def merge_cigar_dels(ref_pos_tuple_list, seq_pos_list, merge_fraction_thr=0.05):
+	assert len(seq_pos_list) == len(ref_pos_tuple_list), f'problem with input. ref_pos_tuple_list: {ref_pos_tuple_list}, seq_pos_list: {seq_pos_list}'
+	if len(ref_pos_tuple_list) < 2:
+		return ref_pos_tuple_list
+	ret_ref_pos_tuple_list = [x for x in ref_pos_tuple_list]
+	# number of bps between two Ds are stored in the left D (in the CIGAR orientation)
+	ret_nbp_within_list = [abs(x - y) for x, y in zip(seq_pos_list[:-1], seq_pos_list[1:])] + [0]
+	assert len(ret_ref_pos_tuple_list) == len(ret_nbp_within_list), f'proble with ret_ref_pos_tuple_list: {ret_ref_pos_tuple_list}, ret_nbp_within_list: {ret_nbp_within_list}'
+	#print(f'ref_pos_tuple_list: {ref_pos_tuple_list}')
+	#print(f'seq_pos_list: {seq_pos_list}')
+	#print(f'ret_ref_pos_tuple_list: {ret_ref_pos_tuple_list}')
+	#print(f'ret_nbp_within_list: {ret_nbp_within_list}')
+	lists_modified = True
+	while lists_modified and len(ret_ref_pos_tuple_list) >= 2:
+		pre_ref_pos_tuple = ret_ref_pos_tuple_list[0]
+		pre_nbp_within = ret_nbp_within_list[0]
+		for ind, cur_ref_pos_tuple in enumerate(ret_ref_pos_tuple_list):
+			if ind == 0:
+				continue
+			cur_nbp_within = ret_nbp_within_list[ind]
+			nbp_within = pre_nbp_within #cur_nbp_within  + pre_nbp_within
+			len_merge = cur_ref_pos_tuple[1] - pre_ref_pos_tuple[0]
+			if (nbp_within / len_merge) < merge_fraction_thr:
+				# overwrite the left D and pop the right D
+				ret_ref_pos_tuple_list[ind - 1] = (pre_ref_pos_tuple[0], cur_ref_pos_tuple[1])
+				ret_nbp_within_list[ind - 1] = nbp_within + cur_nbp_within
+				ret_ref_pos_tuple_list.pop(ind)
+				ret_nbp_within_list.pop(ind)
+				lists_modified = True
+				#print(f'merging...')
+				#print(f'ret_ref_pos_tuple_list: {ret_ref_pos_tuple_list}')
+				#print(f'ret_nbp_within_list: {ret_nbp_within_list}')
+				break
+			pre_ref_pos_tuple = cur_ref_pos_tuple
+			pre_nbp_within = cur_nbp_within
+			lists_modified = False
+
+	#print('Finished...')
+	#print(f'ret_ref_pos_tuple_list: {ret_ref_pos_tuple_list}')
+	#print(f'ret_nbp_within_list: {ret_nbp_within_list}')
+	return ret_ref_pos_tuple_list
+
 def calc_recip_overlap(s1, e1, s2, e2):
+	assert (s1 <= e1) and (s2 <= e2), f'input error, s1: {s1}, e1: {e1}, s2: {s2}, e2: {e2}'
 	if (s1 > e2) or (s2 > e1):
 		return 0
 	so = max(s1, s2)
