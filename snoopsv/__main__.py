@@ -20,6 +20,9 @@ def run_nontr(args):
 	ins_len_thr = args.ins_len_thr
 	del_len_thr = args.del_len_thr
 	del_recip_overlap_thr = args.del_recip_overlap_thr
+	ins_recip_overlap_thr = args.ins_recip_overlap_thr
+	dup_recip_overlap_thr = args.dup_recip_overlap_thr
+	inv_recip_overlap_thr = args.inv_recip_overlap_thr
 	bnd_pos_tol = args.bnd_pos_tol
 	include_svtype = args.include_svtype
 	exclude_svtype = args.exclude_svtype
@@ -28,7 +31,13 @@ def run_nontr(args):
 		print(x,':', y)
 	sys.stdout.flush()
 
-	GT_nonTR(vcf_in, vcf_out, contig=chrom, sample=sample, bam=bam, n_sec=n_sec, i_sec=i_sec, skip_bed=skip_bed, mapping_quality_thr=mapping_quality_thr, buffer_length=buffer_length, p_err=p_err, len_ratio_tol=len_ratio_tol, ins_len_thr=ins_len_thr, del_len_thr=del_len_thr, del_recip_overlap_thr=del_recip_overlap_thr, bnd_pos_tol=bnd_pos_tol, verbose=1, include_svtype=include_svtype, exclude_svtype=exclude_svtype, exclude_contig=exclude_contig)
+	GT_nonTR(vcf_in, vcf_out, contig=chrom, sample=sample, bam=bam, n_sec=n_sec, i_sec=i_sec,
+			 skip_bed=skip_bed, mapping_quality_thr=mapping_quality_thr, buffer_length=buffer_length,
+			 p_err=p_err, len_ratio_tol=len_ratio_tol, ins_len_thr=ins_len_thr, del_len_thr=del_len_thr,
+			 del_recip_overlap_thr=del_recip_overlap_thr, ins_recip_overlap_thr=ins_recip_overlap_thr,
+			 dup_recip_overlap_thr=dup_recip_overlap_thr, inv_recip_overlap_thr=inv_recip_overlap_thr,
+			 bnd_pos_tol=bnd_pos_tol, verbose=1, include_svtype=include_svtype, exclude_svtype=exclude_svtype,
+			 exclude_contig=exclude_contig)
 
 def run_tr(args):
 	tr_annot_file = args.tr_annot
@@ -73,10 +82,13 @@ def main():
 	parser_nontr.add_argument('--mapping-quality-thr', default=20, type=int, help='minimum mapping quality for a read to be considered')
 	parser_nontr.add_argument('--buffer-length', default=500, type=int, help='number of base pairs to look for reads around an sv')
 	parser_nontr.add_argument('--p-err', default=0.01, type=float, help='error probability in sv genotyping model')
-	parser_nontr.add_argument('--len-ratio-tol', default=0.25, type=float, help='tolerance for difference between observed sv length in a read and reported sv length in the input vcf to pass the read as supporting')
+	parser_nontr.add_argument('--len-ratio-tol', default=0.2, type=float, help='tolerance for difference between observed sv length in a read and reported sv length in the input vcf to pass the read as supporting')
 	parser_nontr.add_argument('--ins-len-thr', default=20, type=int, help='minimum insertion length in CIGAR to be considered')
 	parser_nontr.add_argument('--del-len-thr', default=20, type=int, help='minimum deletion length in CIGAR to be considered')
-	parser_nontr.add_argument('--del-recip-overlap-thr', default=0.8, type=float, help='minimum reciprocal overlap between detected and reported deletions to be considered as supporting')
+	parser_nontr.add_argument('--del-recip-overlap-thr', default=0.8, type=float, help='minimum reciprocal overlap for deletions')
+	parser_nontr.add_argument('--ins-recip-overlap-thr', default=0.5, type=float, help='minimum reciprocal overlap for insertions')
+	parser_nontr.add_argument('--dup-recip-overlap-thr', default=0.8, type=float, help='minimum reciprocal overlap for duplications')
+	parser_nontr.add_argument('--inv-recip-overlap-thr', default=0.8, type=float, help='minimum reciprocal overlap for inversions')
 	parser_nontr.add_argument('--bnd-pos-tol', default=50, type=int, help='tolerance for breakend location in base pairs')
 	parser_nontr.add_argument('--include-svtype', default=None, type=str, nargs='*', help='space separated svtypes you want to include')
 	parser_nontr.add_argument('--exclude-svtype', default=None, type=str, nargs='*', help='space separated svtypes you want to exclude')

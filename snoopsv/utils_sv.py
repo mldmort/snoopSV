@@ -3,12 +3,16 @@ from snoopsv.utils import get_cigar_dict, calc_recip_overlap, merge_cigar_dels
 
 class sv_class:
 
-	def __init__(self, rec, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr, bnd_pos_tol):
+	def __init__(self, rec, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr,
+				 ins_recip_overlap_thr, dup_recip_overlap_thr, inv_recip_overlap_thr, bnd_pos_tol):
 
 		self.len_ratio_tol = len_ratio_tol
 		self.ins_len_thr = ins_len_thr
 		self.del_len_thr = del_len_thr
 		self.del_recip_overlap_thr = del_recip_overlap_thr
+		self.ins_recip_overlap_thr = ins_recip_overlap_thr
+		self.dup_recip_overlap_thr = dup_recip_overlap_thr
+		self.inv_recip_overlap_thr = inv_recip_overlap_thr
 		self.bnd_pos_tol = bnd_pos_tol
 
 		self.id = rec.id
@@ -110,7 +114,7 @@ class sv_class:
 				self.read_al_start = cigar_t[ind_end+1][1]
 			self.read_al_stop = self.read_al_start + self.read_al_len
 
-	# this is a generator function going over the SA tag variables
+	# this gives the left and right supplementary alignments if present
 	def get_sa_variables(self, read, mapping_quality_thr):
 		SA_next_right = {'SA_chrom': None, 'SA_strand': None, 'SA_ref_start': -1, 'SA_ref_stop': -1, 'SA_read_start': 1e15, 'SA_read_stop': 1e15}
 		SA_next_left = {'SA_chrom': None, 'SA_strand': None, 'SA_ref_start': -1, 'SA_ref_stop': -1, 'SA_read_start': -1, 'SA_read_stop': -1}
@@ -124,21 +128,9 @@ class sv_class:
 				SA_strand = SA[2]
 				SA_cigar = SA[3]
 				SA_mapq = float(SA[4])
-				#print('SA_chrom:', SA_chrom)
-				#print('SA_strand:', SA_strand)
-				#print('SA_cigar:', SA_cigar)
-				#print('SA_mapq:', SA_mapq)
 
-				# don't yield this SA if:
+				# don't consider this SA if:
 				if (SA_mapq < mapping_quality_thr):
-					continue
-				if ((self.svtype == 'DEL') or (self.svtype == 'INS')) and (SA_strand != self.read_strand):
-					continue
-				#if (self.svtype == 'TRA') and (SA_chrom == self.read_chrom):
-				#	continue
-				#if (self.svtype != 'TRA') and (SA_chrom != self.read_chrom):
-				#	continue
-				if (self.svtype == 'INV') and (SA_strand == self.read_strand):
 					continue
 
 				SA_dict = {'S_left':0, 'S_right':0, 'M':0, 'D':0, 'I':0}
@@ -176,64 +168,68 @@ class sv_class:
 					SA_read_start = SA_dict['S_right']
 					SA_read_stop = SA_read_start + SA_dict['M'] + SA_dict['I']
 
-				# only INS and DEL svtypes use this variable, but be careful
-				# if other svtypes want to use it, it is not set for + - or - + strands
+				delta_read = None
 				delta_ref = None
-				breakpoint_ref_1 = None
-				breakpoint_ref_2 = None
+				ref_overlap = None
+				bp1_delta_ref = None
+				bp2_delta_ref = None
+				bp1_overlap = None
+				bp2_overlap = None
+				bp1_inv = None
+				bp2_inv = None
+				bp_delta_read = None
 				if (self.read_al_start < SA_read_start):
 					delta_read = SA_read_start - self.read_al_stop
+					if (self.read_strand == '+'):
+						bp_delta_read = self.read_ref_stop
+						# +++read+++> <---SA--- +++>  or  <---SA--- +++read+++> <---
+						bp1_inv = min(self.read_ref_stop, SA_ref_stop)
+						bp2_inv = max(self.read_ref_stop, SA_ref_stop)
+					else:
+						bp_delta_read = self.read_ref_start
+						# <--- +++SA+++> <---read---  or  +++SA+++> <---read--- +++>
+						bp1_inv = min(self.read_ref_start, SA_ref_start)
+						bp2_inv = max(self.read_ref_start, SA_ref_start)
 					if (self.read_strand == '+') and (SA_strand == '+'):
 						delta_ref = SA_ref_start - self.read_ref_stop
 						ref_overlap = -1 * delta_ref
 						bp1_overlap = SA_ref_start
 						bp2_overlap = self.read_ref_stop
-						breakpoint_ref_1 = self.read_ref_stop
-						breakpoint_ref_2 = SA_ref_start
+						bp1_delta_ref = self.read_ref_stop
+						bp2_delta_ref = SA_ref_start
 					elif (self.read_strand == '-') and (SA_strand == '-'):
 						delta_ref = self.read_ref_start - SA_ref_stop
 						ref_overlap = -1 * delta_ref
 						bp1_overlap = self.read_ref_start
 						bp2_overlap = SA_ref_stop
-						breakpoint_ref_1 = SA_ref_stop
-						breakpoint_ref_2 = self.read_ref_start
-					else:
-						ref_overlap = min(self.read_ref_stop, SA_ref_stop) - max(self.read_ref_start, SA_ref_start)
-						bp1_overlap = max(self.read_ref_start, SA_ref_start)
-						bp2_overlap = min(self.read_ref_stop, SA_ref_stop)
+						bp1_delta_ref = SA_ref_stop
+						bp2_delta_ref = self.read_ref_start
 				else:
 					delta_read = self.read_al_start - SA_read_stop
+					if (self.read_strand == '+'):
+						bp_delta_read = self.read_ref_start
+						# <--- +++read+++> <---SA---  or  +++> <---SA--- +++read+++>
+						bp1_inv = min(self.read_ref_start, SA_ref_start)
+						bp2_inv = max(self.read_ref_start, SA_ref_start)
+					else:
+						bp_delta_read = self.read_ref_stop
+						# +++SA+++> <---read--- +++>  or  <---read--- +++SA+++> <---
+						bp1_inv = min(self.read_ref_stop, SA_ref_stop)
+						bp2_inv = max(self.read_ref_stop, SA_ref_stop)
 					if (self.read_strand == '+') and (SA_strand == '+'):
 						delta_ref = self.read_ref_start - SA_ref_stop
 						ref_overlap = -1 * delta_ref
 						bp1_overlap = self.read_ref_start
 						bp2_overlap = SA_ref_stop
-						breakpoint_ref_1 = SA_ref_stop
-						breakpoint_ref_2 = self.read_ref_start
+						bp1_delta_ref = SA_ref_stop
+						bp2_delta_ref = self.read_ref_start
 					elif (self.read_strand == '-') and (SA_strand == '-'):
 						delta_ref = SA_ref_start - self.read_ref_stop
 						ref_overlap = -1 * delta_ref
 						bp1_overlap = SA_ref_start
 						bp2_overlap = self.read_ref_stop
-						breakpoint_ref_1 = self.read_ref_stop
-						breakpoint_ref_2 = SA_ref_start
-					else:
-						ref_overlap = min(self.read_ref_stop, SA_ref_stop) - max(self.read_ref_start, SA_ref_start)
-						bp1_overlap = max(self.read_ref_start, SA_ref_start)
-						bp2_overlap = min(self.read_ref_stop, SA_ref_stop)
-
-				#print('SA_dict:', SA_dict)
-				#print('SA_ref_start', SA_ref_start)
-				#print('SA_ref_stop', SA_ref_stop)
-				#print('SA_read_start', SA_read_start)
-				#print('SA_read_stop', SA_read_stop)
-				#print('read_ref_start', read_ref_start)
-				#print('read_ref_stop', read_ref_stop)
-				#print('read_al_start', read_al_start)
-				#print('read_al_stop', read_al_stop)
-				#print('delta_ref:', delta_ref)
-				#print('delta_read:', delta_read)
-				#print('ref_overlap:', ref_overlap)
+						bp1_delta_ref = self.read_ref_stop
+						bp2_delta_ref = SA_ref_start
 
 				if (SA_read_start > self.read_al_start) and (SA_read_start < SA_next_right['SA_read_start']): # SA is right of read
 					SA_next_right['SA_read_start'] = SA_read_start
@@ -242,6 +238,16 @@ class sv_class:
 					SA_next_right['SA_ref_stop'] = SA_ref_stop
 					SA_next_right['SA_chrom'] = SA_chrom
 					SA_next_right['SA_strand'] = SA_strand
+					SA_next_right['delta_read'] = delta_read
+					SA_next_right['delta_ref'] = delta_ref
+					SA_next_right['ref_overlap'] = ref_overlap
+					SA_next_right['bp1_overlap'] = bp1_overlap
+					SA_next_right['bp2_overlap'] = bp2_overlap
+					SA_next_right['bp1_delta_ref'] = bp1_delta_ref
+					SA_next_right['bp2_delta_ref'] = bp2_delta_ref
+					SA_next_right['bp1_inv'] = bp1_inv
+					SA_next_right['bp2_inv'] = bp2_inv
+					SA_next_right['bp_delta_read'] = bp_delta_read
 				if (SA_read_start < self.read_al_start) and (SA_read_start > SA_next_left['SA_read_start']): # SA is left of read
 					SA_next_left['SA_read_start'] = SA_read_start
 					SA_next_left['SA_read_stop'] = SA_read_stop
@@ -249,24 +255,35 @@ class sv_class:
 					SA_next_left['SA_ref_stop'] = SA_ref_stop
 					SA_next_left['SA_chrom'] = SA_chrom
 					SA_next_left['SA_strand'] = SA_strand
+					SA_next_left['delta_read'] = delta_read
+					SA_next_left['delta_ref'] = delta_ref
+					SA_next_left['ref_overlap'] = ref_overlap
+					SA_next_left['bp1_overlap'] = bp1_overlap
+					SA_next_left['bp2_overlap'] = bp2_overlap
+					SA_next_left['bp1_delta_ref'] = bp1_delta_ref
+					SA_next_left['bp2_delta_ref'] = bp2_delta_ref
+					SA_next_left['bp1_inv'] = bp1_inv
+					SA_next_left['bp2_inv'] = bp2_inv
+					SA_next_left['bp_delta_read'] = bp_delta_read
 
-				sa_params = {'SA_strand': SA_strand,
-							'SA_chrom': SA_chrom,
-							'delta_read': delta_read,
-							'delta_ref': delta_ref,
-							'ref_overlap': ref_overlap,
-							'bp1_overlap': bp1_overlap,
-							'bp2_overlap': bp2_overlap,
-							'SA_next_left': SA_next_left,
-							'SA_next_right': SA_next_right,
-							'SA_ref_start': SA_ref_start,
-							'SA_ref_stop':  SA_ref_stop,
-							'SA_read_start': SA_read_start,
-							'SA_read_stop': SA_read_stop,
-							'breakpoint_ref_1': breakpoint_ref_1,
-							'breakpoint_ref_2': breakpoint_ref_2,
-							}
-				yield sa_params
+				#sa_params = {'SA_strand': SA_strand,
+				#			'SA_chrom': SA_chrom,
+				#			'delta_read': delta_read,
+				#			'delta_ref': delta_ref,
+				#			'ref_overlap': ref_overlap,
+				#			'bp1_overlap': bp1_overlap,
+				#			'bp2_overlap': bp2_overlap,
+				#			'SA_next_left': SA_next_left,
+				#			'SA_next_right': SA_next_right,
+				#			'SA_ref_start': SA_ref_start,
+				#			'SA_ref_stop':  SA_ref_stop,
+				#			'SA_read_start': SA_read_start,
+				#			'SA_read_stop': SA_read_stop,
+				#			'bp1_delta_ref': bp1_delta_ref,
+				#			'bp2_delta_ref': bp2_delta_ref,
+				#			}
+				#yield sa_params
+		return SA_next_left, SA_next_right
 
 	def ins_signature(self, read, mapping_quality_thr):
 		'''
@@ -277,55 +294,117 @@ class sv_class:
 		- self.SA_read_supp
 		- self.SA_read_name
 		'''
-		print('===================================')
-		print(f'working on read: {read.query_name}')
-		print('SV:')
-		print(self)
-		print(f'self.read_ref_start: {self.read_ref_start}')
-		print(f'self.read_ref_stop: {self.read_ref_stop}')
-		print(f'self.read_al_start: {self.read_al_start}')
-		print(f'self.read_al_stop: {self.read_al_stop}')
-		print(f'self.cigar_dict: {self.cigar_dict}')
+		#print('===================================')
+		#print(f'working on read: {read.query_name}')
+		#print('SV:')
+		#print(self)
+		#print(f'self.read_ref_start: {self.read_ref_start}')
+		#print(f'self.read_ref_stop: {self.read_ref_stop}')
+		#print(f'self.read_al_start: {self.read_al_start}')
+		#print(f'self.read_al_stop: {self.read_al_stop}')
+		#print(f'self.cigar_dict: {self.cigar_dict}')
 		# from CIGAR
 		pos_list = self.cigar_dict['I']['ref_pos']
 		len_list = self.cigar_dict['I']['len']
 		for ind, ref_pos in enumerate(pos_list):
-			if (ref_pos > self.region_buffer_left) and (ref_pos < self.region_buffer_right):
-				proposed_len = len_list[ind]
-				print(f'ref_pos: {ref_pos}')
-				print(f'CIGAR proposed_len: {proposed_len}')
-				if self.sv_len_pass(proposed_len, self.svlen):
-					self.CG_read_supp = True
-					self.CG_read_name = read.query_name
-					break
+			proposed_len = len_list[ind]
+			bp1 = ref_pos - int(proposed_len/2.)
+			bp2 = ref_pos + int(proposed_len/2.)
+			target_bp1 = self.start - int(self.svlen/2.)
+			target_bp2 = self.start + int(self.svlen/2.)
+			recip_overlap = calc_recip_overlap(bp1, bp2, target_bp1, target_bp2, self)
+			#print(f'CIGAR proposed_len: {proposed_len}')
+			#print(f'bp1: {bp1}')
+			#print(f'bp2: {bp2}')
+			#print(f'target_bp1: {target_bp1}')
+			#print(f'target_bp2: {target_bp2}')
+			#print(f'recip_overlap: {recip_overlap}')
+			if recip_overlap >= self.ins_recip_overlap_thr and self.sv_len_pass(proposed_len, self.svlen):
+				self.CG_read_supp = True
+				self.CG_read_name = read.query_name
+				break
 
-		# from supplementary alignments
-		for sa_params in self.get_sa_variables(read, mapping_quality_thr):
-			SA_strand = sa_params['SA_strand']
-			delta_read = sa_params['delta_read']
-			delta_ref = sa_params['delta_ref']
-			ref_overlap = sa_params['ref_overlap']
-			bp1_overlap = sa_params['bp1_overlap']
-			bp2_overlap = sa_params['bp2_overlap']
-			proposed_len = delta_read - delta_ref
-			print('xxxxxxxxxxxxxxxxxxxxxxxxxx')
-			print(f'sa_params: {sa_params}')
-			print(f'proposed_len: {proposed_len}')
-			print(f'ref_overlap: {ref_overlap}')
-			if (ref_overlap < 30) and self.sv_len_pass(proposed_len, self.svlen):
-				self.SA_read_supp = True
-				self.SA_read_name = read.query_name
-				break
+		#print(f'self.CG_read_supp: {self.CG_read_supp}')
+
+		SA_next_left, SA_next_right = self.get_sa_variables(read, mapping_quality_thr)
+
+		#print('xxxxxxxxxxxxxxxxxxxxxxxxxx')
+		#print(f'SA_next_left: {SA_next_left}')
+		# if we have an SA on the left with the same strand
+		if (SA_next_left['SA_chrom'] == self.read_chrom) and (SA_next_left['SA_strand'] == self.read_strand):
+			delta_read = SA_next_left['delta_read']
+			bp_delta_read = SA_next_left['bp_delta_read']
+			if delta_read > 0: # just to make sure
+				bp1 = bp_delta_read - int(delta_read/2.)
+				bp2 = bp_delta_read + int(delta_read/2.)
+				target_bp1 = self.start - int(self.svlen/2.)
+				target_bp2 = self.start + int(self.svlen/2.)
+				recip_overlap = calc_recip_overlap(bp1, bp2, target_bp1, target_bp2, self)
+				#print(f'bp1: {bp1}')
+				#print(f'bp2: {bp2}')
+				#print(f'target_bp1: {target_bp1}')
+				#print(f'target_bp2: {target_bp2}')
+				#print(f'recip_overlap: {recip_overlap}')
+				if recip_overlap >= self.ins_recip_overlap_thr:
+					self.SA_read_supp = True
+					self.SA_read_name = read.query_name
+
 			# check if the read has a DUP signal
-			proposed_len = ref_overlap
-			if self.sv_len_pass(proposed_len, self.svlen) and \
-				(   (float(abs(self.start - bp1_overlap)) < 100) or \
-					(float(abs(self.stop - bp2_overlap)) < 100) ):
-				self.SA_read_supp = True
-				self.SA_read_name = read.query_name
-				break
-		print(f'self.CG_read_supp: {self.CG_read_supp}')
-		print(f'self.SA_read_supp: {self.SA_read_supp}')
+			ref_overlap = SA_next_left['ref_overlap']
+			if ref_overlap > 0:
+				bp1 = bp_delta_read - int(ref_overlap/2.)
+				bp2 = bp_delta_read + int(ref_overlap/2.)
+				target_bp1 = self.start - int(self.svlen/2.)
+				target_bp2 = self.start + int(self.svlen/2.)
+				recip_overlap = calc_recip_overlap(bp1, bp2, target_bp1, target_bp2, self)
+				#print(f'DUP check: ref_overlap: {ref_overlap}')
+				#print(f'DUP check: bp1: {bp1}')
+				#print(f'DUP check: bp2: {bp2}')
+				#print(f'DUP check: target_bp1: {target_bp1}')
+				#print(f'DUP check: target_bp2: {target_bp2}')
+				#print(f'recip_overlap: {recip_overlap}')
+				if recip_overlap >= self.ins_recip_overlap_thr:
+					self.SA_read_supp = True
+					self.SA_read_name = read.query_name
+
+		#print(f'SA_next_right: {SA_next_right}')
+		# if we have an SA on the right with the same strand
+		if (SA_next_right['SA_chrom'] == self.read_chrom) and (SA_next_right['SA_strand'] == self.read_strand):
+			delta_read = SA_next_right['delta_read']
+			bp_delta_read = SA_next_right['bp_delta_read']
+			if delta_read > 0: # just to make sure
+				bp1 = bp_delta_read - int(delta_read/2.)
+				bp2 = bp_delta_read + int(delta_read/2.)
+				target_bp1 = self.start - int(self.svlen/2.)
+				target_bp2 = self.start + int(self.svlen/2.)
+				recip_overlap = calc_recip_overlap(bp1, bp2, target_bp1, target_bp2, self)
+				#print(f'bp1: {bp1}')
+				#print(f'bp2: {bp2}')
+				#print(f'target_bp1: {target_bp1}')
+				#print(f'target_bp2: {target_bp2}')
+				#print(f'recip_overlap: {recip_overlap}')
+				if recip_overlap >= self.ins_recip_overlap_thr:
+					self.SA_read_supp = True
+					self.SA_read_name = read.query_name
+
+			# check if the read has a DUP signal
+			ref_overlap = SA_next_right['ref_overlap']
+			if ref_overlap > 0:
+				bp1 = bp_delta_read - int(ref_overlap/2.)
+				bp2 = bp_delta_read + int(ref_overlap/2.)
+				target_bp1 = self.start - int(self.svlen/2.)
+				target_bp2 = self.start + int(self.svlen/2.)
+				recip_overlap = calc_recip_overlap(bp1, bp2, target_bp1, target_bp2, self)
+				#print(f'DUP check: ref_overlap: {ref_overlap}')
+				#print(f'DUP check: bp1: {bp1}')
+				#print(f'DUP check: bp2: {bp2}')
+				#print(f'DUP check: target_bp1: {target_bp1}')
+				#print(f'DUP check: target_bp2: {target_bp2}')
+				#print(f'recip_overlap: {recip_overlap}')
+				if recip_overlap >= self.ins_recip_overlap_thr:
+					self.SA_read_supp = True
+					self.SA_read_name = read.query_name
+		#print(f'self.SA_read_supp: {self.SA_read_supp}')
 
 	def del_signature(self, read, mapping_quality_thr):
 		'''
@@ -345,50 +424,49 @@ class sv_class:
 		#print(f'self.read_al_start: {self.read_al_start}')
 		#print(f'self.read_al_stop: {self.read_al_stop}')
 		# from CIGAR
-		#ref_pos_list = self.cigar_dict['D']['ref_pos']
-		#print(f'self.cigar_dict: {self.cigar_dict}')
 		ref_pos_list = merge_cigar_dels(self.cigar_dict['D']['ref_pos'], self.cigar_dict['D']['seq_pos'])
+		#print(f'self.cigar_dict: {self.cigar_dict}')
+		#print(f'ref_pos_list: {ref_pos_list}')
 		for ref_pos_t in ref_pos_list:
 			ref_pos_start = ref_pos_t[0]
 			ref_pos_stop = ref_pos_t[1]
 			#print(f'ref_pos_start: {ref_pos_start}')
 			#print(f'ref_pos_stop: {ref_pos_stop}')
 			if (ref_pos_start > self.region_buffer_left) and (ref_pos_stop < self.region_buffer_right):
-				recip_overlap = calc_recip_overlap(ref_pos_start, ref_pos_stop, self.start, self.stop)
+				recip_overlap = calc_recip_overlap(ref_pos_start, ref_pos_stop, self.start, self.stop, self)
 				#print(f'recip_overlap: {recip_overlap}')
 				if recip_overlap >= self.del_recip_overlap_thr:
 					self.CG_read_supp = True
 					self.CG_read_name = read.query_name
 					break
 
-		# from supplementary alignments
-		for sa_params in self.get_sa_variables(read, mapping_quality_thr):
-			#delta_read = sa_params['delta_read']
-			#delta_ref = sa_params['delta_ref']
-			#ref_overlap = sa_params['ref_overlap']
-			#proposed_len = delta_ref - delta_read
+		SA_next_left, SA_next_right = self.get_sa_variables(read, mapping_quality_thr)
 
-			#SA_strand = sa_params['SA_strand']
-			#SA_ref_start = sa_params['SA_ref_start']
-			#SA_ref_stop = sa_params['SA_ref_stop']
-			#SA_read_start = sa_params['SA_read_start']
-			#SA_read_stop = sa_params['SA_read_stop']
-			breakpoint_ref_1 = sa_params['breakpoint_ref_1']
-			breakpoint_ref_2 = sa_params['breakpoint_ref_2']
-			#print('xxxxxxxxxxxxxxxxxxxxxxxxxx')
-			#print(f'sa_params: {sa_params}')
-			#print(f'proposed_len: {proposed_len}')
-			if breakpoint_ref_1 < breakpoint_ref_2:
-				recip_overlap = calc_recip_overlap(breakpoint_ref_1, breakpoint_ref_2, self.start, self.stop)
+		#print('xxxxxxxxxxxxxxxxxxxxxxxxxx')
+		#print(f'SA_next_left: {SA_next_left}')
+		# if we have an SA on the left with the same strand
+		if (SA_next_left['SA_chrom'] == self.read_chrom) and (SA_next_left['SA_strand'] == self.read_strand):
+			bp1_delta_ref = SA_next_left['bp1_delta_ref']
+			bp2_delta_ref = SA_next_left['bp2_delta_ref']
+			if bp1_delta_ref < bp2_delta_ref:
+				recip_overlap = calc_recip_overlap(bp1_delta_ref, bp2_delta_ref, self.start, self.stop, self)
 				#print(f'recip_overlap: {recip_overlap}')
 				if recip_overlap >= self.del_recip_overlap_thr:
 					self.SA_read_supp = True
 					self.SA_read_name = read.query_name
-					break
-			#if (ref_overlap < 30) and self.sv_len_pass(proposed_len, self.svlen):
-			#	self.SA_read_supp = True
-			#	self.SA_read_name = read.query_name
-			#	break
+
+		#print(f'SA_next_right: {SA_next_right}')
+		# if we have an SA on the right with the same strand
+		if (SA_next_right['SA_chrom'] == self.read_chrom) and (SA_next_right['SA_strand'] == self.read_strand):
+			bp1_delta_ref = SA_next_right['bp1_delta_ref']
+			bp2_delta_ref = SA_next_right['bp2_delta_ref']
+			if bp1_delta_ref < bp2_delta_ref:
+				recip_overlap = calc_recip_overlap(bp1_delta_ref, bp2_delta_ref, self.start, self.stop, self)
+				#print(f'recip_overlap: {recip_overlap}')
+				if recip_overlap >= self.del_recip_overlap_thr:
+					self.SA_read_supp = True
+					self.SA_read_name = read.query_name
+
 		#print(f'self.CG_read_supp: {self.CG_read_supp}')
 		#print(f'self.SA_read_supp: {self.SA_read_supp}')
 
@@ -401,34 +479,76 @@ class sv_class:
 		- self.SA_read_supp
 		- self.SA_read_name
 		'''
-		# from CIGAR
+		#print('===================================')
+		#print(f'working on read: {read.query_name}')
+		#print('SV:')
+		#print(self)
+		#print(f'self.read_ref_start: {self.read_ref_start}')
+		#print(f'self.read_ref_stop: {self.read_ref_stop}')
+		#print(f'self.read_al_start: {self.read_al_start}')
+		#print(f'self.read_al_stop: {self.read_al_stop}')
+		#print(f'self.cigar_dict: {self.cigar_dict}')
+		# from CIGAR, signal from insertion calls
 		pos_list = self.cigar_dict['I']['ref_pos']
 		len_list = self.cigar_dict['I']['len']
 		for ind, ref_pos in enumerate(pos_list):
-			if (ref_pos > self.region_buffer_left) and (ref_pos < self.region_buffer_right):
-				proposed_len = len_list[ind]
-				if self.sv_len_pass(proposed_len, self.svlen):
-					self.CG_read_supp = True
-					self.CG_read_name = read.query_name
-					break
+			proposed_len = len_list[ind]
+			bp1_op1 = ref_pos - proposed_len
+			bp2_op1 = ref_pos
+			bp1_op2 = ref_pos
+			bp2_op2 = ref_pos + proposed_len
+			recip_overlap_op1 = calc_recip_overlap(bp1_op1, bp2_op1, self.start, self.stop, self)
+			recip_overlap_op2 = calc_recip_overlap(bp1_op2, bp2_op2, self.start, self.stop, self)
+			#print(f'CIGAR proposed_len: {proposed_len}')
+			#print(f'bp1_op1: {bp1_op1}')
+			#print(f'bp2_op1: {bp2_op1}')
+			#print(f'recip_overlap_op1: {recip_overlap_op1}')
+			#print(f'bp1_op2: {bp1_op2}')
+			#print(f'bp2_op2: {bp2_op2}')
+			#print(f'recip_overlap_op2: {recip_overlap_op2}')
+			if recip_overlap_op1 >= self.dup_recip_overlap_thr or recip_overlap_op2 >= self.dup_recip_overlap_thr:
+				self.CG_read_supp = True
+				self.CG_read_name = read.query_name
+				break
 
-		# from supplementary alignments
-		for sa_params in self.get_sa_variables(read, mapping_quality_thr):
-			SA_strand = sa_params['SA_strand']
-			ref_overlap = sa_params['ref_overlap']
-			bp1_overlap = sa_params['bp1_overlap']
-			bp2_overlap = sa_params['bp2_overlap']
-			if (self.read_strand == SA_strand):
-				proposed_len = ref_overlap
-				#if (float(abs(sv_len - target_svlen))/float(target_svlen) < len_ratio_tol) and \
-				#	(   (float(abs(target_start - bp1_overlap))/float(target_svlen) < len_ratio_tol) or \
-				#		(float(abs(target_stop - bp2_overlap))/float(target_svlen) < len_ratio_tol) ):
-				if self.sv_len_pass(proposed_len, self.svlen) and \
-					(   (float(abs(self.start - bp1_overlap)) < 100) or \
-						(float(abs(self.stop - bp2_overlap)) < 100) ):
+		#print(f'self.CG_read_supp: {self.CG_read_supp}')
+
+		SA_next_left, SA_next_right = self.get_sa_variables(read, mapping_quality_thr)
+
+		#print('xxxxxxxxxxxxxxxxxxxxxxxxxx')
+		#print(f'SA_next_left: {SA_next_left}')
+		# if we have an SA on the left with the same strand
+		if (SA_next_left['SA_chrom'] == self.read_chrom) and (SA_next_left['SA_strand'] == self.read_strand):
+			ref_overlap = SA_next_left['ref_overlap']
+			bp1_overlap = SA_next_left['bp1_overlap']
+			bp2_overlap = SA_next_left['bp2_overlap']
+			#print(f'bp1_overlap: {bp1_overlap}')
+			#print(f'bp2_overlap: {bp2_overlap}')
+			#print(f'ref_overlap: {ref_overlap}')
+			if ref_overlap > 0:
+				recip_overlap = calc_recip_overlap(bp1_overlap, bp2_overlap, self.start, self.stop, self)
+				#print(f'recip_overlap: {recip_overlap}')
+				if recip_overlap >= self.dup_recip_overlap_thr:
 					self.SA_read_supp = True
 					self.SA_read_name = read.query_name
-					break
+
+		#print(f'SA_next_right: {SA_next_right}')
+		# if we have an SA on the right with the same strand
+		if (SA_next_right['SA_chrom'] == self.read_chrom) and (SA_next_right['SA_strand'] == self.read_strand):
+			ref_overlap = SA_next_right['ref_overlap']
+			bp1_overlap = SA_next_right['bp1_overlap']
+			bp2_overlap = SA_next_right['bp2_overlap']
+			#print(f'bp1_overlap: {bp1_overlap}')
+			#print(f'bp2_overlap: {bp2_overlap}')
+			#print(f'ref_overlap: {ref_overlap}')
+			if ref_overlap > 0:
+				recip_overlap = calc_recip_overlap(bp1_overlap, bp2_overlap, self.start, self.stop, self)
+				#print(f'recip_overlap: {recip_overlap}')
+				if recip_overlap >= self.dup_recip_overlap_thr:
+					self.SA_read_supp = True
+					self.SA_read_name = read.query_name
+
+		#print(f'self.SA_read_supp: {self.SA_read_supp}')
 
 	def inv_signature(self, read, mapping_quality_thr):
 		'''
@@ -439,57 +559,74 @@ class sv_class:
 		- self.SA_read_supp
 		- self.SA_read_name
 		'''
-		SA_next_left = None
-		SA_next_right = None
-		# we just need SA_next_left and SA_next_right after going through all the supplementary alignments
-		for sa_params in self.get_sa_variables(read, mapping_quality_thr):
-			SA_next_left = sa_params['SA_next_left']
-			SA_next_right = sa_params['SA_next_right']
-		if SA_next_left == None:
-			return
+		#print('===================================')
+		#print(f'working on read: {read.query_name}')
+		#print('SV:')
+		#print(self)
+		#print(f'self.read_ref_start: {self.read_ref_start}')
+		#print(f'self.read_ref_stop: {self.read_ref_stop}')
+		#print(f'self.read_al_start: {self.read_al_start}')
+		#print(f'self.read_al_stop: {self.read_al_stop}')
 
-		#this_sv_id = 'Sniffles2.INV.86S0'
-		#if (self.id == this_sv_id):
-		#	print(f'read name: {read.query_name}')
-		#	print(f'SA_next_left: {SA_next_left}')
-		#	print(f'SA_next_right: {SA_next_right}')
-		#	print('+++++++++++++++++++++++++++')
-		
+		SA_next_left, SA_next_right = self.get_sa_variables(read, mapping_quality_thr)
+
+		has_right_SA = False
+		has_left_SA = False
+
+		#print('xxxxxxxxxxxxxxxxxxxxxxxxxx')
+		#print(f'SA_next_right: {SA_next_right}')
 		# read has a right SA
-		if (SA_next_right['SA_ref_start'] != -1):
-			if self.read_strand == '+':
-				breakpoint1 = self.read_ref_stop
-				breakpoint2 = SA_next_right['SA_ref_stop']
-			else:
-				breakpoint1 = self.read_ref_start
-				breakpoint2 = SA_next_right['SA_ref_start']
-			min_bp_right = min(breakpoint1, breakpoint2)
-			max_bp_right = max(breakpoint1, breakpoint2)
-		else:
-			min_bp_right = -1
-			max_bp_right = 1e15
-		# read has a left SA
-		if (SA_next_left['SA_ref_start'] != -1):
-			if self.read_strand == '+':
-				breakpoint1 = self.read_ref_start
-				breakpoint2 = SA_next_left['SA_ref_start']
-			else:
-				breakpoint1 = self.read_ref_stop
-				breakpoint2 = SA_next_left['SA_ref_stop']
-			min_bp_left = min(breakpoint1, breakpoint2)
-			max_bp_left = max(breakpoint1, breakpoint2)
-		else:
-			min_bp_left = -1
-			max_bp_left = 1e15
+		if (SA_next_right['SA_chrom'] == self.read_chrom) and (SA_next_right['SA_strand'] != self.read_strand):
+			has_right_SA = True
+			bp1_inv_right = SA_next_right['bp1_inv']
+			bp2_inv_right = SA_next_right['bp2_inv']
+			#print(f'bp1_inv_right: {bp1_inv_right}')
+			#print(f'bp2_inv_right: {bp2_inv_right}')
 
-		bp_1 = max(min_bp_right, min_bp_left)
-		bp_2 = min(max_bp_right, max_bp_left)
-		#print('bp_1:', bp_1, 'bp_2:', bp_2)
-		if bp_1 != -1:
-			proposed_len = abs(bp_2 - bp_1)
-			if self.sv_len_pass(proposed_len, self.svlen):
+		#print(f'SA_next_left: {SA_next_left}')
+		# read has a left SA
+		if (SA_next_left['SA_chrom'] == self.read_chrom) and (SA_next_left['SA_strand'] != self.read_strand):
+			has_left_SA = True
+			bp1_inv_left = SA_next_left['bp1_inv']
+			bp2_inv_left = SA_next_left['bp2_inv']
+			#print(f'bp1_inv_left: {bp1_inv_left}')
+			#print(f'bp2_inv_left: {bp2_inv_left}')
+
+		if has_right_SA and has_left_SA:
+			bp1 = max(bp1_inv_right, bp1_inv_left)
+			bp2 = min(bp2_inv_right, bp2_inv_left)
+			if bp1 < bp2:
+				recip_overlap = calc_recip_overlap(bp1, bp2, self.start, self.stop, self)
+				#print(f'bp1: {bp1}')
+				#print(f'bp2: {bp2}')
+				#print(f'recip_overlap: {recip_overlap}')
+				if recip_overlap >= self.inv_recip_overlap_thr:
+					self.SA_read_supp = True
+					self.SA_read_name = read.query_name
+
+		if has_right_SA:
+			bp1 = bp1_inv_right
+			bp2 = bp2_inv_right
+			recip_overlap = calc_recip_overlap(bp1, bp2, self.start, self.stop, self)
+			#print(f'right bp1: {bp1}')
+			#print(f'right bp2: {bp2}')
+			#print(f'right recip_overlap: {recip_overlap}')
+			if recip_overlap >= self.inv_recip_overlap_thr:
 				self.SA_read_supp = True
 				self.SA_read_name = read.query_name
+
+		if has_left_SA:
+			bp1 = bp1_inv_left
+			bp2 = bp2_inv_left
+			recip_overlap = calc_recip_overlap(bp1, bp2, self.start, self.stop, self)
+			#print(f'left bp1: {bp1}')
+			#print(f'left bp2: {bp2}')
+			#print(f'left recip_overlap: {recip_overlap}')
+			if recip_overlap >= self.inv_recip_overlap_thr:
+				self.SA_read_supp = True
+				self.SA_read_name = read.query_name
+
+		#print(f'self.SA_read_supp: {self.SA_read_supp}')
 
 	def bnd_signature(self, read, mapping_quality_thr):
 		'''
@@ -500,28 +637,7 @@ class sv_class:
 		- self.SA_read_supp
 		- self.SA_read_name
 		'''
-		# from supplementary alignments
-		SA_next_left = None
-		SA_next_right = None
-		# we just need SA_next_left and SA_next_right after going through all the supplementary alignments
-		for sa_params in self.get_sa_variables(read, mapping_quality_thr):
-			SA_next_left = sa_params['SA_next_left']
-			SA_next_right = sa_params['SA_next_right']
-
-		#this_sv_id = 'Sniffles2.BND.B37S0'
-		#this_rd_id = 'm64278e_210903_184900/75039160/ccs'
-		#if (self.id == this_sv_id and read.query_name == this_rd_id):
-		#	print(f'read name: {read.query_name}')
-		#	print(f'SA_next_left: {SA_next_left}')
-		#	print(f'SA_next_right: {SA_next_right}')
-		#	print('+++++++++++++++++++++++++++')
-
-		if SA_next_left == None: # this read did not have any SA tag
-			return
-
-		#print(f'read name: {read.query_name}')
-		#print(f'SA_next_left: {SA_next_left}')
-		#print(f'SA_next_right: {SA_next_right}')
+		SA_next_left, SA_next_right = self.get_sa_variables(read, mapping_quality_thr)
 
 		# read has a right SA with right mapped chrom
 		if (SA_next_right['SA_ref_start'] != -1 and SA_next_right['SA_chrom'] == self.chr2):
@@ -533,11 +649,6 @@ class sv_class:
 				breakpoint2 = SA_next_right['SA_ref_start']
 			else:
 				breakpoint2 = SA_next_right['SA_ref_stop']
-			#if (self.id == this_sv_id and read.query_name == this_rd_id):
-			#	print(f'read_strand: {self.read_strand}, SA_strand: {SA_next_right["SA_strand"]}')
-			#	print(f'breakpoint1: {breakpoint1}')
-			#	print(f'breakpoint2: {breakpoint2}')
-			#	print(f'start: {self.start}, pos2: {self.pos2}, bnd_pos_tol: {self.bnd_pos_tol}')
 			if (abs(breakpoint1 - self.start) < self.bnd_pos_tol and
 				abs(breakpoint2 - self.pos2) < self.bnd_pos_tol):
 					self.SA_read_supp = True
@@ -553,11 +664,6 @@ class sv_class:
 				breakpoint2 = SA_next_left['SA_ref_stop']
 			else:
 				breakpoint2 = SA_next_left['SA_ref_start']
-			#if (self.id == this_sv_id and read.query_name == this_rd_id):
-			#	print(f'read_strand: {self.read_strand}, SA_strand: {SA_next_left["SA_strand"]}')
-			#	print(f'breakpoint1: {breakpoint1}')
-			#	print(f'breakpoint2: {breakpoint2}')
-			#	print(f'start: {self.start}, pos2: {self.pos2}, bnd_pos_tol: {self.bnd_pos_tol}')
 			if (abs(breakpoint1 - self.start) < self.bnd_pos_tol and
 				abs(breakpoint2 - self.pos2) < self.bnd_pos_tol):
 					self.SA_read_supp = True

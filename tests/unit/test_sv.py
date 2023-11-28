@@ -20,9 +20,13 @@ p_err = 0.01
 len_ratio_tol = 0.25
 ins_len_thr = 20
 del_len_thr = 20
-del_recip_overlap_thr = 0.3
+del_recip_overlap_thr = 0.8
+ins_recip_overlap_thr = 0.5
+dup_recip_overlap_thr = 0.8
+inv_recip_overlap_thr = 0.8
 bnd_pos_tol = 50
-extra_params = (skip_bed, mapping_quality_thr, buffer_length, p_err, len_ratio_tol, ins_len_thr, del_len_thr, del_recip_overlap_thr, bnd_pos_tol)
+extra_params = (skip_bed, mapping_quality_thr, buffer_length, p_err, len_ratio_tol, ins_len_thr, del_len_thr,
+				del_recip_overlap_thr, ins_recip_overlap_thr, dup_recip_overlap_thr, inv_recip_overlap_thr, bnd_pos_tol)
 
 def test_sv_del():
 	temp_dir = tempfile.TemporaryDirectory()
@@ -101,7 +105,7 @@ def test_sv_dup():
 	GT_nonTR(vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, *extra_params, verbose=1)
 
 	vcf_fh = pysam.VariantFile(vcf_out)
-	print(vcf_fh)
+	#print(vcf_fh)
 	for record in vcf_fh.fetch():
 		if record.id == 'Sniffles2.INV.81S0':
 			assert record.samples["SAMPLE"]["RR"] == 1 #TODO: is there more RR according to sniffles?
@@ -178,9 +182,9 @@ def test_sv_dup_large():
 	vcf_fh.close()
 
 if __name__ == '__main__':
-	#sys.exit(test_sv_del())
-	#sys.exit(test_sv_ins())
-	#sys.exit(test_sv_dup())
+	sys.exit(test_sv_del())
+	sys.exit(test_sv_ins())
+	sys.exit(test_sv_dup())
 	sys.exit(test_sv_inv())
-	#sys.exit(test_sv_dup_large())
+	sys.exit(test_sv_dup_large())
 

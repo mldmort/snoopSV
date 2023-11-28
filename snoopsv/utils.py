@@ -109,8 +109,10 @@ def merge_cigar_dels(ref_pos_tuple_list, seq_pos_list, merge_fraction_thr=0.05):
 	#print(f'ret_nbp_within_list: {ret_nbp_within_list}')
 	return ret_ref_pos_tuple_list
 
-def calc_recip_overlap(s1, e1, s2, e2):
-	assert (s1 <= e1) and (s2 <= e2), f'input error, s1: {s1}, e1: {e1}, s2: {s2}, e2: {e2}'
+def calc_recip_overlap(s1, e1, s2, e2, sv_obj=None):
+	assert (s1 <= e1) and (s2 <= e2), f'input error, s1: {s1}, e1: {e1}, s2: {s2}, e2: {e2}, sv_obj: {sv_obj}'
+	if (s1 == e1) or (s2 == e2):
+		return 0
 	if (s1 > e2) or (s2 > e1):
 		return 0
 	so = max(s1, s2)
