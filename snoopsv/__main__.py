@@ -40,20 +40,30 @@ def run_nontr(args):
 			 exclude_contig=exclude_contig)
 
 def run_tr(args):
-	tr_annot_file = args.tr_annot
+	annot_file = args.annot_file
 	vcf_in = args.vcf_in
 	vcf_out = args.vcf_out
-	sample_bam_file = args.sample_bam_file
+	sample = args.sample
+	bam = args.bam
 	chrom = args.contig
 	n_sec = args.n_section
 	i_sec = args.i_section
 	tr_span_max = args.l_max
 	r_min = args.r_min
+	mapping_quality_thr = args.mapping_quality_thr
+	buffer_length = args.buffer_length
+	annot_columns = args.annot_columns
+	include_columns = args.include_columns
+	exclude_columns = args.exclude_columns
+	header_lines = args.header_lines
+	info_prefix = args.info_prefix
+	skip_bed = args.skip_bed
+	flanking_bp = args.flanking_bp
 	for x, y in args.__dict__.items():
 		print(x,':', y)
 	sys.stdout.flush()
 
-	GT_TR(tr_annot_file=tr_annot_file, vcf_in=vcf_in, vcf_out=vcf_out, contig=chrom, sample_bam_file=sample_bam_file, n_sec=n_sec, i_sec=i_sec, tr_span_max=tr_span_max, r_min=r_min, verbose=1)
+	GT_TR(annot_file=annot_file, vcf_in=vcf_in, vcf_out=vcf_out, contig=chrom, sample=sample, bam=bam, n_sec=n_sec, i_sec=i_sec, mapping_quality_thr=mapping_quality_thr, buffer_length=buffer_length, tr_span_max=tr_span_max, r_min=r_min, annot_columns=annot_columns, include_columns=include_columns, exclude_columns=exclude_columns, header_lines=header_lines, info_prefix=info_prefix, skip_bed=skip_bed, flanking_bp=flanking_bp, verbose=1)
 
 def run_score(args):
 	vcf_in = args.vcf_in
@@ -70,7 +80,7 @@ def main():
 	parser = argparse.ArgumentParser(description='snoopSV detects long reads supporting SV calls, and genotype them.')
 	subparsers = parser.add_subparsers(help='available sub-commands')
 
-	parser_nontr = subparsers.add_parser('nontr', help='Analyze SVs in the non-TR mode')
+	parser_nontr = subparsers.add_parser('nontr', help='Detect SV signitures in non-TR mode')
 	parser_nontr.add_argument('-v', '--vcf_in', required=True, help='input VCF file')
 	parser_nontr.add_argument('-o', '--vcf_out', required=True, help='output VCF file')
 	parser_nontr.add_argument('-s', '--sample', required=True, help='sample of interest, if not present in the input VCF will be added to it')
@@ -95,16 +105,26 @@ def main():
 	parser_nontr.add_argument('--exclude-contig', default=None, type=str, nargs='*', help='contig names to exclude from processing.')
 	parser_nontr.set_defaults(func=run_nontr)
 
-	parser_tr = subparsers.add_parser('tr', help='process TR annotations')
-	parser_tr.add_argument('-t', '--tr_annot', required=True, help='TR annotation file. Should be a tab delimited file with columns: tr_chrom, tr_start, tr_end, period length, copy number, period sequence. If you do not have any column information you should put dummy strings for them.')
-	parser_tr.add_argument('-v', '--vcf_in', required=True, help='dummy input VCF file to use for header')
+	parser_tr = subparsers.add_parser('tr', help='Detect sequence expansion/contraction across TR annotations')
+	parser_tr.add_argument('-a', '--annot_file', required=True, help='annotation file. Should be an unzipped bed file with the first three columns: chrom, start, end. If extra columns exist, they will be added to the INFO field of the output VCF. Must have a # header to name the extra fields or alternatively provide the header names with another input option.')
+	parser_tr.add_argument('-v', '--vcf_in', required=True, help='an input VCF file only to use for its header. Make sure no extra samples are present. The presence of the main sample is optional, and will be added if it is not.')
 	parser_tr.add_argument('-o', '--vcf_out', required=True, help='output VCF file')
-	parser_tr.add_argument('-s', '--sample_bam_file', required=True, help='a map between samples and bam files as a tab delimited text file. First column is the samples, and second column is the absolute path to the bam files')
+	parser_tr.add_argument('--header-lines', default=None, type=str, required=False, help='a file with header lines wants to be added to the output VCF file.')
+	parser_tr.add_argument('-s', '--sample', required=True, help='sample of interest, if not present in the input VCF will be added to it')
+	parser_tr.add_argument('-b', '--bam', required=True, help='mapped Long read bam file associated with the sample of interest')
 	parser_tr.add_argument('-c', '--contig', default=None, help='contig name. If used the input VCF should be indexed')
 	parser_tr.add_argument('-n', '--n_section', type=int, default=1, help='number of sections in the input VCF file')
 	parser_tr.add_argument('-i', '--i_section', type=int, default=0, help='which section of the input VCF file to process')
 	parser_tr.add_argument('-l', '--l_max', type=int, default=int(1e9), help='maximum TR span for genotyping')
 	parser_tr.add_argument('-r', '--r_min', type=int, default=int(1), help='minimum number of reads required in a haplotype for genotyping')
+	parser_tr.add_argument('--mapping-quality-thr', default=20, type=int, help='minimum mapping quality for a read to be considered')
+	parser_tr.add_argument('--buffer-length', default=500, type=int, help='number of base pairs to look for reads around an annotation')
+	parser_tr.add_argument('--annot-columns', default=None, type=str, help='comma-separated column names of the annotation file.')
+	parser_tr.add_argument('--include-columns', default='all', type=str, help='comma-separated extra columns you want to include. Default: all')
+	parser_tr.add_argument('--exclude-columns', default=None, type=str, help='comma-separated extra columns you want to exclude. Default: None')
+	parser_tr.add_argument('--info-prefix', default='TR', type=str, help='prefix of extra columns in the info field. Default: TR')
+	parser_tr.add_argument('--skip-bed', default=None, help='skip analyzing calls intersecting with this bed file')
+	parser_tr.add_argument('--flanking-bp', type=int, default=50, help='number of flanking base pairs around an annotation region to match the reads')
 	parser_tr.set_defaults(func=run_tr)
 
 	parser_score = subparsers.add_parser('score', help='score variants with a ML model')

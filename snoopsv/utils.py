@@ -160,6 +160,7 @@ def get_seq_segment(read, ref_start, ref_stop):
 	read_al_start = read.query_alignment_start ### this always starts from the left side of CIGAR, no mater + or - strand read
 	read_al_stop = read.query_alignment_end
 	read_al_len = read.query_alignment_length
+	#print('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
 	#print('read_ref_start:', read_ref_start)
 	#print('read_ref_stop:', read_ref_stop)
 	#print('read_al_start:', read_al_start)
@@ -181,9 +182,6 @@ def get_seq_segment(read, ref_start, ref_stop):
 
 	if read_ref_stop < ref_stop:
 		seq_stop = read_al_len
-
-	#print('seq_start:', seq_start)
-	#print('seq_stop:', seq_stop)
 
 	cigar_t = read.cigartuples
 	#print('cigar_t:')
@@ -252,8 +250,8 @@ def get_seq_segment(read, ref_start, ref_stop):
 		cur_ref_pos = nxt_ref_pos
 		cur_seq_pos = nxt_seq_pos
 
-	assert cur_ref_pos == read_ref_stop, 'something wrong with CIGAR length addition, cur_ref_pos: '+str(cur_ref_pos)+', read_ref_stop: '+str(read_ref_stop)
-	assert cur_seq_pos == read_al_stop-read_al_start, 'something wrong with CIGAR length addition, cur_seq_pos: '+str(cur_seq_pos)+', read_al_stop-read_al_start: '+str(read_al_stop-read_al_start)
+	assert cur_ref_pos == read_ref_stop, 'something wrong with CIGAR length addition, cur_ref_pos: ' + str(cur_ref_pos) + ', read_ref_stop: ' + str(read_ref_stop)
+	assert cur_seq_pos == read_al_stop - read_al_start, 'something wrong with CIGAR length addition, cur_seq_pos: '+ str(cur_seq_pos) + ', read_al_stop - read_al_start: ' + str(read_al_stop - read_al_start)
 
 	assert ((seq_start != -1) and (seq_stop != -1)), 'problem with sequence index, seq_start: '+str(seq_start)+', seq_stop: '+str(seq_stop)
 
@@ -266,6 +264,7 @@ def get_seq_segment(read, ref_start, ref_stop):
 	### read_al_len: the length of query_alignment_sequence
 	sequence = read.query_alignment_sequence[max(seq_start,0):min(seq_stop,read_al_len)]
 
+	#print('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
 	return sequence, blank_start, blank_stop
 
 def get_seq_segment_supp(read_a, read_b, ref_start, ref_stop):
@@ -424,7 +423,6 @@ def get_seq_segment_supp(read_a, read_b, ref_start, ref_stop):
 	### query_alignment_sequence: just have the aligned sequence in the region not the soft clipped sequences
 	### query_sequence: have all the read sequence, including the soft clipped sequence
 	### read_al_len: the length of query_alignment_sequence
-	#sequence = read.query_alignment_sequence[max(seq_start,0):min(seq_stop,read_al_len)]
 	sequence = read_a.query_sequence[(read_a_al_start+seq_start):(read_b_al_start+seq_stop)]
 
 	return sequence, blank_start, blank_stop
