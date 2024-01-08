@@ -93,6 +93,7 @@ def GT_TR(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, mappin
 		print(f'Adding sample: {sample} to the output VCF')
 		fh_vcf_out.header.add_sample(sample)
 
+	fh_bam = pysam.AlignmentFile(bam, 'rb')
 
 	count_skip_region = 0
 	sys.stdout.flush()
@@ -116,7 +117,6 @@ def GT_TR(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, mappin
 			fh_vcf_out.write(rec)
 			continue
 
-		fh_bam = pysam.AlignmentFile(bam, 'rb')
 		visited_read_set = set()
 		num_bp_dict = {'H1':[], 'H2':[], 'H0':[]}
 
@@ -134,7 +134,6 @@ def GT_TR(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, mappin
 					else:
 						num_bp_dict['H0'].append(num_bp)
 				sa_supp_any = sa_supp_any or sa_supp
-		fh_bam.close()
 
 		GT_bp = infer_gt_tr_phased(num_bp_dict, r_min)
 		rec.samples[sample]['GT_BP'] = GT_bp
@@ -197,5 +196,6 @@ def GT_TR(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, mappin
 		print('Finished all variants')
 		print('count_skip_region:', count_skip_region)
 
+	fh_bam.close()
+	fh_vcf_in.close()
 	fh_vcf_out.close()
-
