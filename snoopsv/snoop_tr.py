@@ -5,7 +5,7 @@ from snoopsv.utils_tr import tr_signature_3, infer_gt_tr_phased
 from snoopsv.utils_vcf import add_header_lines_tr
 import sys
 
-def GT_TR(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, mapping_quality_thr, buffer_length, tr_span_max, r_min, annot_columns, include_columns, exclude_columns, header_lines, info_prefix, skip_bed, flanking_bp, verbose=1):
+def GT_TR(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, mapping_quality_thr, buffer_length, tr_span_max, r_min, annot_columns, include_columns, exclude_columns, annot_len_dev_column, annot_len_dev_prc, annot_len_dev_bp, header_lines, info_prefix, skip_bed, flanking_bp, verbose=1):
 
 	#**k_s_dict = {}
 	#**p_val_thr = 0.07
@@ -18,10 +18,15 @@ def GT_TR(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, mappin
 
 	verbose_debug = True
 
+	if annot_len_dev_column != None:
+		# NOTE I am HERE
+		assert annot_len_dev_prc == None, f'cannot have both annot_len_dev_column: {annot_len_dev_column} and annot_len_dev_prc: {annot_len_dev_prc}'
+		assert annot_len_dev_bp == None, f'cannot have both annot_len_dev_column: {annot_len_dev_column} and annot_len_dev_bp: {annot_len_dev_bp}'
 	annot_has_header = False
 	annot_columns_list = []
 	extra_fields_list = []
 	extra_fields_idx_list = []
+	annot_len_dev_column_idx = None
 
 	# check if the annotation file has a header
 	out = subprocess.run(['head', '-n', '1', annot_file], check=True, capture_output=True, text=True).stdout
@@ -51,9 +56,13 @@ def GT_TR(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, mappin
 		if col in include_columns_list and col not in exclude_columns_list:
 			extra_fields_list.append(col)
 			extra_fields_idx_list.append(idx)
+			if annot_len_dev_column == col:
+				annot_len_dev_column_idx = idx
 
 	print(f'annotation file columns: {", ".join(annot_columns_list)}')
 	print(f'annotation columns added to the INFO: {", ".join(extra_fields_list)}')
+	print(f'annotation length deviation column requested: {annot_len_dev_column}')
+	print(f'annotation length deviation column index found: {annot_len_dev_column_idx}')
 
 	if contig:
 		command = ['awk', 'BEGIN{FS="\t";OFS="\t"}$1=="'+contig+'"', annot_file]
@@ -82,7 +91,10 @@ def GT_TR(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, mappin
 
 	fh_vcf_in = pysam.VariantFile(vcf_in)
 	header_in = fh_vcf_in.header
-	add_header_lines_tr(header_in, info_prefix, extra_fields_list)
+	extra_fields_toheader_list = extra_fields_list
+	if annot_len_dev_column_idx != None:
+		extra_fields_toheader_list.append('MIN_' + annot_len_dev_column)
+	add_header_lines_tr(header_in, info_prefix, extra_fields_toheader_list)
 	if header_lines:
 		with open(header_lines, 'r') as fh:
 			for line in fh.readlines():
@@ -102,13 +114,19 @@ def GT_TR(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, mappin
 		chrom = annot_split[0]
 		start = int(annot_split[1])
 		end = int(annot_split[2])
+		annot_id = '_'.join([info_prefix, chrom, str(start), str(end)])
 
-		rec = fh_vcf_out.new_record(contig=chrom, start=start, stop=end, alleles=('.', '.'))
+		rec = fh_vcf_out.new_record(contig=chrom, start=start, stop=end, alleles=('.', '.'), id=annot_id)
 
 		for extra_field_idx, extra_field in zip(extra_fields_idx_list, extra_fields_list):
 			rec.info[info_prefix + '_' + extra_field] = annot_split[extra_field_idx]
 		rec.info[info_prefix + '_' + 'ANNOT'] = True
 		rec.stop = end
+
+		annot_unit_len_min = 1
+		if annot_len_dev_column_idx != None:
+			annot_unit_len_min = min([int(x) for x in annot_split[annot_len_dev_column_idx].split(',')])
+			rec.info[info_prefix + '_' + 'MIN_' + annot_len_dev_column] = str(annot_unit_len_min)
 
 		skip = skip_class(skip_bed)
 		if skip.skip_region(chrom, start, end):
@@ -181,9 +199,9 @@ def GT_TR(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec, i_sec, mappin
 			temp = '.'
 		rec.samples[sample]['BP_DEV_H0'] = temp
 
-		rec.samples[sample]['N_H1'] = str(len(num_bp_dict['H1']))
-		rec.samples[sample]['N_H2'] = str(len(num_bp_dict['H2']))
-		rec.samples[sample]['N_H0'] = str(len(num_bp_dict['H0']))
+		rec.samples[sample]['N_H1'] = len(num_bp_dict['H1'])
+		rec.samples[sample]['N_H2'] = len(num_bp_dict['H2'])
+		rec.samples[sample]['N_H0'] = len(num_bp_dict['H0'])
 
 		if sa_supp_any:
 			rec.samples[sample]['SA_SUPP'] = '1'

@@ -106,6 +106,7 @@ def tr_signature_3(read, tr_start, tr_end, visited_read_set, bam, mapping_qualit
 					#	print('sa_read_mapq:', sa_read_mapq)
 					#	print('sa_read.query_alignment_start:', sa_read.query_alignment_start)
 					#	print('sa_read.query_alignment_end:', sa_read.query_alignment_end)
+		fh_bam.close()
 
 	### query_alignment_start: this always starts from the left side of CIGAR, no mater + or - strand read
 	### so the largest one is the right most alignment in the ref coordinates. That is the one we choose to process

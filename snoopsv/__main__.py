@@ -55,6 +55,9 @@ def run_tr(args):
 	annot_columns = args.annot_columns
 	include_columns = args.include_columns
 	exclude_columns = args.exclude_columns
+	annot_len_dev_column = args.annot_len_dev_column
+	annot_len_dev_prc = args.annot_len_dev_prc
+	annot_len_dev_bp = args.annot_len_dev_bp
 	header_lines = args.header_lines
 	info_prefix = args.info_prefix
 	skip_bed = args.skip_bed
@@ -63,7 +66,7 @@ def run_tr(args):
 		print(x,':', y)
 	sys.stdout.flush()
 
-	GT_TR(annot_file=annot_file, vcf_in=vcf_in, vcf_out=vcf_out, contig=chrom, sample=sample, bam=bam, n_sec=n_sec, i_sec=i_sec, mapping_quality_thr=mapping_quality_thr, buffer_length=buffer_length, tr_span_max=tr_span_max, r_min=r_min, annot_columns=annot_columns, include_columns=include_columns, exclude_columns=exclude_columns, header_lines=header_lines, info_prefix=info_prefix, skip_bed=skip_bed, flanking_bp=flanking_bp, verbose=1)
+	GT_TR(annot_file=annot_file, vcf_in=vcf_in, vcf_out=vcf_out, contig=chrom, sample=sample, bam=bam, n_sec=n_sec, i_sec=i_sec, mapping_quality_thr=mapping_quality_thr, buffer_length=buffer_length, tr_span_max=tr_span_max, r_min=r_min, annot_columns=annot_columns, include_columns=include_columns, exclude_columns=exclude_columns, annot_len_dev_column=annot_len_dev_column, annot_len_dev_prc=annot_len_dev_prc, annot_len_dev_bp=annot_len_dev_bp, header_lines=header_lines, info_prefix=info_prefix, skip_bed=skip_bed, flanking_bp=flanking_bp, verbose=1)
 
 def run_score(args):
 	vcf_in = args.vcf_in
@@ -122,6 +125,9 @@ def main():
 	parser_tr.add_argument('--annot-columns', default=None, type=str, help='comma-separated column names of the annotation file.')
 	parser_tr.add_argument('--include-columns', default='all', type=str, help='comma-separated extra columns you want to include. Default: all')
 	parser_tr.add_argument('--exclude-columns', default=None, type=str, help='comma-separated extra columns you want to exclude. Default: None')
+	parser_tr.add_argument('--annot-len-dev-column', default=None, type=str, help='column name of length deviation or comma-separated length deviations for the annotation. The minimun value of the comma-separated ones is used for significant deviation. Default: None')
+	parser_tr.add_argument('--annot-len-dev-prc', default=None, type=float, help='this percentage of annotation length is used as length deviation threshold for significant deviation. Default: None')
+	parser_tr.add_argument('--annot-len-dev-bp', default=None, type=int, help='number of base pairs to be used as length deviation threshold for significant deviation. Default: None')
 	parser_tr.add_argument('--info-prefix', default='TR', type=str, help='prefix of extra columns in the info field. Default: TR')
 	parser_tr.add_argument('--skip-bed', default=None, help='skip analyzing calls intersecting with this bed file')
 	parser_tr.add_argument('--flanking-bp', type=int, default=50, help='number of flanking base pairs around an annotation region to match the reads')
