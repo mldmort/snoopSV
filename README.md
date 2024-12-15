@@ -26,7 +26,7 @@ Install with micromamba:
 ```
 git clone https://github.com/mldmort/snoopSV.git
 cd snoopSV
-micromamba env create -n <snoopsv> python=3.10
+micromamba env create -n <snoopsv> -f requirements.txt python=3.10
 micromamba activate <snoopsv>
 make
 ```
