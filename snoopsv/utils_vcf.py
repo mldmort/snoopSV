@@ -58,3 +58,28 @@ def add_header_lines_tr(header_in, prefix='', extra_fields_list=None):
 		header_in.add_line(line)
 
 	return
+
+def add_header_lines_methyl(header_in, prefix='', extra_fields_list=None):
+
+	new_header_INFO = [
+	f'##INFO=<ID=SKIP_REGION,Number=0,Type=Flag,Description="Skip this call for genotyping">',
+	]
+	if extra_fields_list:
+		for extra_field in extra_fields_list:
+			line = f'##INFO=<ID={prefix}_{extra_field},Number=.,Type=String,Description="{extra_field} from annotation file, from snoopSV">'
+			new_header_INFO.append(line)
+	new_header_FORMAT = [
+	'##FORMAT=<ID=METHYL_H1,Number=.,Type=String,Description="methylation probabilities, 0-100, for each Cm reported for each read in H1, from snoopSV">',
+	'##FORMAT=<ID=METHYL_H2,Number=.,Type=String,Description="methylation probabilities, 0-100, for each Cm reported for each read in H2, from snoopSV">',
+	'##FORMAT=<ID=METHYL_H0,Number=.,Type=String,Description="methylation probabilities, 0-100, for each Cm reported for each read in H0, from snoopSV">',
+	'##FORMAT=<ID=BP_DEV_H1,Number=.,Type=String,Description="number of bp deviation for each read in H1, from snoopSV">',
+	'##FORMAT=<ID=BP_DEV_H2,Number=.,Type=String,Description="number of bp deviation for each read in H2, from snoopSV">',
+	'##FORMAT=<ID=BP_DEV_H0,Number=.,Type=String,Description="number of bp deviation for each read in H0, from snoopSV">',
+	'##FORMAT=<ID=N_H1,Number=1,Type=Integer,Description="number of supporting reads in H1, from snoopSV">',
+	'##FORMAT=<ID=N_H2,Number=1,Type=Integer,Description="number of supporting reads in H2, from snoopSV">',
+	'##FORMAT=<ID=N_H0,Number=1,Type=Integer,Description="number of supporting reads in H0, from snoopSV">',
+	]
+	for line in new_header_INFO + new_header_FORMAT:
+		header_in.add_line(line)
+
+	return

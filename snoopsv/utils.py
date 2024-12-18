@@ -1,3 +1,4 @@
+from numpy import round, array
 
 class skip_class(object):
 
@@ -426,3 +427,236 @@ def get_seq_segment_supp(read_a, read_b, ref_start, ref_stop):
 	sequence = read_a.query_sequence[(read_a_al_start+seq_start):(read_b_al_start+seq_stop)]
 
 	return sequence, blank_start, blank_stop
+
+
+def get_seq_start_stop_idx(read, ref_start, ref_stop):
+	"""
+	this function returns coordinates of the read.query_sequence where it overlaps with ref_star:ref_stop.
+	if there are no overlap the -1 is returned for seq_start and seq_stop.
+	if read sequence does not cover ref_start:ref_stop completely, the portion of the read where it overlaps is returned.
+	"""
+	seq_start = -1
+	seq_stop = -1
+	blank_start = 0
+	blank_stop = 0
+
+	cigartuples = read.cigartuples
+
+	query_sequence = read.query_sequence
+
+	read_ref_start = read.reference_start
+	read_ref_stop = read.reference_end
+
+	### handle the case where no overlap exists:
+	if read_ref_start >= ref_stop or read_ref_stop < ref_start:
+		return seq_start, seq_stop, blank_start, blank_stop
+
+	### handle the case where mapped read starts in the middle of ref_start:ref_stop
+	if read_ref_start > ref_start:
+		seq_start = 0
+
+	### handle the case where mapped read stops in the middle of ref_start:ref_stop
+	if read_ref_stop < ref_stop:
+		seq_stop = len(query_sequence)
+
+	### even for - strand reads the sequence in the bam file is reported as if it is on the + strand. So the CIGAR which starts from left to right is consistant with the sequence itself. so you don't need to reverse complement the sequences.
+	cur_ref_pos = read_ref_start
+	cur_seq_pos = 0
+	for c in cigartuples:
+		#[ind_start:ind_end+1]:
+		if c[0] == 4: # S
+			nxt_ref_pos = cur_ref_pos
+			nxt_seq_pos = cur_seq_pos + c[1]
+			cur_cigar = 'S'
+		elif c[0] == 0 or c[0] == 7 or c[0] == 8: # 0: Match, 7: =, 8: X
+			nxt_ref_pos = cur_ref_pos + c[1]
+			nxt_seq_pos = cur_seq_pos + c[1]
+			cur_cigar = 'M'
+		elif c[0] == 1: # Ins
+			nxt_ref_pos = cur_ref_pos
+			nxt_seq_pos = cur_seq_pos + c[1]
+			cur_cigar = 'I'
+		elif c[0] == 2: # Del
+			nxt_ref_pos = cur_ref_pos + c[1]
+			nxt_seq_pos = cur_seq_pos
+			cur_cigar = 'D'
+		else:
+			assert 0==1, f'Wrong cigar code c[0]: {c[0]} in read: {read.query_name}'
+		#print('c:', c, 'cur_cigar:', cur_cigar, 'cur_seq_pos:', cur_seq_pos, 'nxt_seq_pos:', nxt_seq_pos, 'cur_ref_pos:', cur_ref_pos, 'nxt_ref_pos:', nxt_ref_pos)
+
+		if (ref_start >= cur_ref_pos) and (ref_start <= nxt_ref_pos) and (seq_start == -1):
+			if (cur_cigar == 'M'):
+				#print('seq_start set at M, cur_ref_pos:', cur_ref_pos, 'nxt_ref_pos:', nxt_ref_pos, 'ref_start:', ref_start)
+				seq_start = cur_seq_pos + (ref_start - cur_ref_pos)
+			elif (cur_cigar == 'D'):
+				#print('seq_start set at D/I, cur_ref_pos:', cur_ref_pos, 'nxt_ref_pos:', nxt_ref_pos, 'ref_start:', ref_start, 'cur_cigar:', cur_cigar)
+				seq_start = cur_seq_pos
+				blank_start = nxt_ref_pos - ref_start
+			else:
+				assert 0==1, 'wrong cur_cigar: '+cur_cigar+', cur_cigar should not be I. should be cought earlier'
+		if (ref_stop >= cur_ref_pos) and (ref_stop <= nxt_ref_pos) and (seq_stop == -1):
+			if (cur_cigar == 'M'):
+				#print('seq_stop set at M, cur_ref_pos:', cur_ref_pos, 'nxt_ref_pos:', nxt_ref_pos, 'ref_stop:', ref_stop)
+				seq_stop = cur_seq_pos + (ref_stop - cur_ref_pos)
+			elif (cur_cigar == 'D'):
+				#print('seq_start set at D/I, cur_ref_pos:', cur_ref_pos, 'nxt_ref_pos:', nxt_ref_pos, 'ref_stop:', ref_stop, 'cur_cigar:', cur_cigar)
+				seq_stop = cur_seq_pos
+				blank_stop = ref_stop - cur_ref_pos
+			else:
+				assert 0==1, 'wrong cur_cigar: '+cur_cigar+', cur_cigar should not be I. should be cought earlier'
+
+		cur_ref_pos = nxt_ref_pos
+		cur_seq_pos = nxt_seq_pos
+
+	assert cur_ref_pos == read_ref_stop, 'something wrong with CIGAR length addition, cur_ref_pos: ' + str(cur_ref_pos) + ', read_ref_stop: ' + str(read_ref_stop)
+	assert cur_seq_pos == len(query_sequence), 'something wrong with CIGAR length addition, cur_seq_pos: '+ str(cur_seq_pos) + ', len(query_sequence): ' + str(len(query_sequence))
+
+	assert ((seq_start != -1) and (seq_stop != -1)), 'problem with sequence index, seq_start: '+str(seq_start)+', seq_stop: '+str(seq_stop)
+
+	#print('seq_start:', seq_start)
+	#print('seq_stop:', seq_stop)
+
+	return seq_start, seq_stop, blank_start, blank_stop
+
+def get_ml(read, ref_start, ref_stop):
+	"""
+	this function returns methylation probabilities of the read overlapping with ref_start:ref_end (values range: 0-100). And the number of bps in the read between ref_start:ref-stop only if the read spans the entire region, otherwise num_bp will be '.'
+	if MM tag is not present it returns an empty list for the probabilities and '.' for num_bp.
+	"""
+	verbose = False
+	verbose_debug = False
+	#print('I am here in get_ml...')
+
+	num_bp = '.'
+
+	### check if the read has MM and ML tags
+	read_mm = None
+	read_ml = None
+	if read.has_tag('MM'):
+		read_mm = read.get_tag(tag="MM")
+		read_ml = read.get_tag(tag="ML")
+
+	if read_mm == None:
+		return [], num_bp
+
+	query_sequence = read.query_sequence
+	cigartuples = read.cigartuples
+
+	read_strand = '+'
+	if read.is_reverse:
+		read_strand = '-'
+
+	### parse the location of the CpG with methylation information
+	read_mm_list = [int(x) for x in read_mm.rstrip(';').split(',')[1:]]
+	assert len(read_mm_list) == len(read_ml), f'Problem in MM/ML tags for read: {read.query_name}. MM length: {len(read_mm_list)}, ML length: {len(read_ml)}. MM: {read_mm}, ML: {read_ml}'
+
+	if verbose:
+		print(f'query_sequence: {read.query_sequence}')
+		print(f'read_mm_list: {read_mm_list}')
+		print(f'read_mm_list length: {len(read_mm_list)}')
+		print(f'type of read_ml: {type(read_ml)}')
+		print(f'read_ml length: {len(read_ml)}')
+	
+	### looking for C in + strand reads and G in - strand reads
+	target_bp = 'C'
+	if read_strand == '-':
+		target_bp = 'G'
+
+	### find the indexes of all target base pair (C for + and G for - strand) in the sequence
+	### Note: sequence is always in the + orientation
+	###	      read.query_sequence contains all the read sequence includeing the soft clip sections
+	query_idxs = [i for i, x in enumerate(query_sequence) if x == target_bp]
+	if verbose:
+		print(f'query_idxs: {query_idxs}')
+		print(f'query_idxs length: {len(query_idxs)}')
+		for i in query_idxs[:4]:
+			print(i)
+			print(query_sequence[i-3:i+4])
+		print('+++++++++++++++')
+		for i in query_idxs[-4:]:
+			print(i)
+			print(query_sequence[i-3:i+4])
+	
+	### find which target bps have methylation info
+	### this is the indexes of only the target-bps when other bps are omitted from the sequence (idx=2 means the third C/G)
+	### if the read is on the negative strand, MM list starts from the end of the query_sequence.
+	target_bp_idxs = []
+	if read_strand == '+':
+		base_idx = 0
+		for mm in read_mm_list:
+			cur_idx = base_idx + mm
+			base_idx = cur_idx + 1
+			target_bp_idxs.append(cur_idx)
+	elif read_strand == '-':
+		tmp_idxs = [] # this is the index of target-bp from the end of query sequence
+		base_idx = 0
+		for mm in read_mm_list:
+			cur_idx = base_idx + mm
+			base_idx = cur_idx + 1
+			tmp_idxs.append(cur_idx)
+		target_bp_idxs = [len(query_idxs) - 1 - x for x in tmp_idxs][::-1] # reverse the order and sort from the beginning
+	else:
+		raise(f'Problem with read strand: {read_strand} in read: {read.query_name}')
+	if verbose:
+		print(f'target_bp_idxs: {target_bp_idxs}')
+		
+	### indexes of the methylation-containing base pairs in the query sequence (the indexes reletative to the original sequence)
+	query_mm_idxs = [query_idxs[x] for x in target_bp_idxs]
+	if verbose:
+		print(f'query_mm_idxs: {query_mm_idxs}')
+		for i in query_mm_idxs[:5]:
+			print(i)
+			print(query_sequence[i-3:i+4])
+		print('+++++++++++++++')
+		for i in query_mm_idxs[-4:]:
+			print(i)
+			print(query_sequence[i-3:i+4])
+
+	### get sequence coordinate corresponding to the reference start-stop
+	seq_start_idx, seq_stop_idx, blank_start, blank_stop = get_seq_start_stop_idx(read, ref_start, ref_stop)
+
+	if read.reference_start <= ref_start and read.reference_end >= ref_stop:
+		num_bp = seq_stop_idx - seq_start_idx
+
+	if verbose:
+		print(f'seq_start_idx: {seq_start_idx}')
+		print(f'seq_stop_idx: {seq_stop_idx}')
+
+	### extract the methylation info corresponding to reference start-stop
+	### if read strand is negative, the indexes of query_mm_idxs (m_idx) corresponds to the index of the reverse of MM/ML lists
+	mm_start_idx = None
+	mm_stop_idx = None
+	for m_idx, q_idx in enumerate(query_mm_idxs):
+		if q_idx >= seq_start_idx and q_idx < seq_stop_idx and mm_start_idx == None:
+			mm_start_idx = m_idx
+		if mm_start_idx != None and q_idx > seq_stop_idx and mm_stop_idx == None:
+			mm_stop_idx = m_idx
+	if mm_start_idx != None and mm_stop_idx == None:
+		mm_stop_idx = len(read_mm_list)
+	if verbose:
+		print(f'mm_start_idx: {mm_start_idx}')
+		print(f'mm_stop_idx: {mm_stop_idx}')
+
+	### handle the case where no methylation C/G is found in the interval
+	return_ml_probs = []
+	if mm_start_idx != None:
+		### if read is on positive strand, the MM and ML lists have the same direction as the  query_sequence
+		### if read is on negative strand, the MM and ML lists have the opposite direction of query_sequence
+		if read_strand == '+':
+			return_mls = [int(x) for x in read_ml[mm_start_idx:mm_stop_idx]]
+		else:
+			return_mls = [int(x) for x in read_ml[::-1][mm_start_idx:mm_stop_idx]]
+		return_ml_probs = [int(x) for x in round(array(return_mls)/256*100)]
+		if verbose_debug:
+			print(f'methylation probs: {return_ml_probs}')
+			print('four loci in the begining...')
+			for i in query_mm_idxs[mm_start_idx:mm_start_idx+5]:
+				print(i)
+				print(query_sequence[i-3:i+4])
+			print('+++++++++++++++')
+			print('four loci in the end...')
+			for i in query_mm_idxs[mm_stop_idx-4:mm_stop_idx]:
+				print(i)
+				print(query_sequence[i-3:i+4])
+	
+	return return_ml_probs, num_bp

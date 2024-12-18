@@ -2,6 +2,7 @@ import argparse
 import sys
 from snoopsv.snoop_sv import GT_nonTR
 from snoopsv.snoop_tr import GT_TR
+from snoopsv.snoop_methyl import process_methylation
 from snoopsv.snoop_score import SCORE_VCF
 
 def run_nontr(args):
@@ -68,6 +69,32 @@ def run_tr(args):
 
 	GT_TR(annot_file=annot_file, vcf_in=vcf_in, vcf_out=vcf_out, contig=chrom, sample=sample, bam=bam, n_sec=n_sec, i_sec=i_sec, mapping_quality_thr=mapping_quality_thr, buffer_length=buffer_length, tr_span_max=tr_span_max, r_min=r_min, annot_columns=annot_columns, include_columns=include_columns, exclude_columns=exclude_columns, annot_len_dev_column=annot_len_dev_column, annot_len_dev_prc=annot_len_dev_prc, annot_len_dev_bp=annot_len_dev_bp, header_lines=header_lines, info_prefix=info_prefix, skip_bed=skip_bed, flanking_bp=flanking_bp, verbose=1)
 
+def run_methyl(args):
+	annot_file = args.annot_file
+	vcf_in = args.vcf_in
+	vcf_out = args.vcf_out
+	sample = args.sample
+	bam = args.bam
+	chrom = args.contig
+	n_sec = args.n_section
+	i_sec = args.i_section
+	region_span_max = args.l_max
+	r_min = args.r_min
+	mapping_quality_thr = args.mapping_quality_thr
+	buffer_length = args.buffer_length
+	annot_columns = args.annot_columns
+	include_columns = args.include_columns
+	exclude_columns = args.exclude_columns
+	header_lines = args.header_lines
+	info_prefix = args.info_prefix
+	skip_bed = args.skip_bed
+	flanking_bp = args.flanking_bp
+	for x, y in args.__dict__.items():
+		print(x,':', y)
+	sys.stdout.flush()
+
+	process_methylation(annot_file=annot_file, vcf_in=vcf_in, vcf_out=vcf_out, contig=chrom, sample=sample, bam=bam, n_sec=n_sec, i_sec=i_sec, mapping_quality_thr=mapping_quality_thr, buffer_length=buffer_length, region_span_max=region_span_max, r_min=r_min, annot_columns=annot_columns, include_columns=include_columns, exclude_columns=exclude_columns, header_lines=header_lines, info_prefix=info_prefix, skip_bed=skip_bed, flanking_bp=flanking_bp, verbose=1)
+
 def run_score(args):
 	vcf_in = args.vcf_in
 	annot_in = args.annot_in
@@ -80,9 +107,10 @@ def run_score(args):
 	SCORE_VCF(vcf_in=vcf_in, annot_in=annot_in, cov_in=cov_in, models=models, vcf_out=vcf_out)
 
 def main():
-	parser = argparse.ArgumentParser(description='snoopSV detects long reads supporting SV calls, and genotype them.')
+	parser = argparse.ArgumentParser(description='snoopSV program, in nontr mode, detects supporting reads for SV inputs, and genotypes them; and in tr mode, detects base pair deviations of each long read and genotypes TR regions.')
 	subparsers = parser.add_subparsers(help='available sub-commands')
 
+	### nontr SV analysis
 	parser_nontr = subparsers.add_parser('nontr', help='Detect SV signitures in non-TR mode')
 	parser_nontr.add_argument('-v', '--vcf_in', required=True, help='input VCF file')
 	parser_nontr.add_argument('-o', '--vcf_out', required=True, help='output VCF file')
@@ -108,6 +136,7 @@ def main():
 	parser_nontr.add_argument('--exclude-contig', default=None, type=str, nargs='*', help='contig names to exclude from processing.')
 	parser_nontr.set_defaults(func=run_nontr)
 
+	### TR analysis
 	parser_tr = subparsers.add_parser('tr', help='Detect sequence expansion/contraction across TR annotations')
 	parser_tr.add_argument('-a', '--annot_file', required=True, help='annotation file. Should be an unzipped bed file with the first three columns: chrom, start, end. If extra columns exist, they will be added to the INFO field of the output VCF. Must have a # header to name the extra fields or alternatively provide the header names with another input option.')
 	parser_tr.add_argument('-v', '--vcf_in', required=True, help='an input VCF file only to use for its header. Make sure no extra samples are present. The presence of the main sample is optional, and will be added if it is not.')
@@ -133,6 +162,30 @@ def main():
 	parser_tr.add_argument('--flanking-bp', type=int, default=50, help='number of flanking base pairs around an annotation region to match the reads')
 	parser_tr.set_defaults(func=run_tr)
 
+	### methylation analysis
+	parser_methyl = subparsers.add_parser('methyl', help='Detect methylation signature across defined regions')
+	parser_methyl.add_argument('-a', '--annot_file', required=True, help='annotation file. Should be an unzipped bed file with the first three columns: chrom, start, end. If extra columns exist, they will be added to the INFO field of the output VCF. Must have a # header to name the extra fields or alternatively provide the header names with another input option.')
+	parser_methyl.add_argument('--annot-columns', default=None, type=str, help='comma-separated column names of the annotation file.')
+	parser_methyl.add_argument('-v', '--vcf_in', required=True, help='an input VCF file only to use for its header. Make sure no extra samples are present. The presence of the main sample is optional, and will be added if it is not.')
+	parser_methyl.add_argument('-o', '--vcf_out', required=True, help='output VCF file')
+	parser_methyl.add_argument('--header-lines', default=None, type=str, required=False, help='a file with header lines wants to be added to the output VCF file.')
+	parser_methyl.add_argument('-s', '--sample', required=True, help='sample of interest, if not present in the input VCF will be added to it')
+	parser_methyl.add_argument('-b', '--bam', required=True, help='mapped Long read bam file associated with the sample of interest')
+	parser_methyl.add_argument('-c', '--contig', default=None, help='contig name. If used the input VCF should be indexed')
+	parser_methyl.add_argument('-n', '--n_section', type=int, default=1, help='number of sections in the input VCF file')
+	parser_methyl.add_argument('-i', '--i_section', type=int, default=0, help='which section of the input VCF file to process')
+	parser_methyl.add_argument('-l', '--l_max', type=int, default=int(1e9), help='maximum region span to process')
+	parser_methyl.add_argument('-r', '--r_min', type=int, default=int(1), help='minimum number of reads required in a haplotype for genotyping')
+	parser_methyl.add_argument('--mapping-quality-thr', default=1, type=int, help='minimum mapping quality for a read to be considered')
+	parser_methyl.add_argument('--buffer-length', default=100, type=int, help='number of base pairs to look for reads around an annotation')
+	parser_methyl.add_argument('--include-columns', default='all', type=str, help='comma-separated extra columns you want to include. Default: all')
+	parser_methyl.add_argument('--exclude-columns', default=None, type=str, help='comma-separated extra columns you want to exclude. Default: None')
+	parser_methyl.add_argument('--info-prefix', default='REGION', type=str, help='prefix of extra columns in the info field. Default: REGION')
+	parser_methyl.add_argument('--skip-bed', default=None, help='skip analyzing calls intersecting with this bed file')
+	parser_methyl.add_argument('--flanking-bp', type=int, default=50, help='number of flanking base pairs around an annotation region to match the reads')
+	parser_methyl.set_defaults(func=run_methyl)
+
+	### ML-based scoring
 	parser_score = subparsers.add_parser('score', help='score variants with a ML model')
 	parser_score.add_argument('-v', '--vcf_in', required=True, help='input VCF file, unscored')
 	parser_score.add_argument('-a', '--annot_in', required=True, help='input annotation file coresponding to input VCF file')
@@ -140,6 +193,7 @@ def main():
 	parser_score.add_argument('-m', '--models', required=True, help='a file with ML model labels in the first column, pickled file addresses in the second column, and camma separated model variables in the third column. each line represent one model to be applied.')
 	parser_score.add_argument('-c', '--coverage_file', required=True, help='coverage file, column one: sample name, column two: coverage summary file')
 	parser_score.set_defaults(func=run_score)
+
 	### parse the command line
 	args = parser.parse_args()
 
