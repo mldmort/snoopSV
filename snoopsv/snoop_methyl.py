@@ -114,6 +114,7 @@ def process_methylation(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec,
 		visited_read_set = set()
 		methyl_prob_dict = {'H1':[], 'H2':[], 'H0':[]}
 		num_bp_dict = {'H1':[], 'H2':[], 'H0':[]}
+		read_name_dict = {'H1':[], 'H2':[], 'H0':[]}
 
 		#sa_supp_any = False
 		for read in fh_bam.fetch(chrom, max(0, start - buffer_length), end + buffer_length):
@@ -128,9 +129,11 @@ def process_methylation(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec,
 						HP = read.get_tag(tag='HP')
 						methyl_prob_dict['H'+str(HP)].append(methyl_probs_str)
 						num_bp_dict['H'+str(HP)].append(num_bp)
+						read_name_dict['H'+str(HP)].append(read.query_name)
 					else:
 						methyl_prob_dict['H0'].append(methyl_probs_str)
 						num_bp_dict['H0'].append(num_bp)
+						read_name_dict['H0'].append(read.query_name)
 
 		length = end - start
 
@@ -163,6 +166,21 @@ def process_methylation(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec,
 		if temp == '':
 			temp = '.'
 		rec.samples[sample]['BP_DEV_H0'] = temp
+
+		temp = ','.join([x for x in read_name_dict['H1']])
+		if temp == '':
+			temp = '.'
+		rec.samples[sample]['RN_H1'] = temp
+
+		temp = ','.join([x for x in read_name_dict['H2']])
+		if temp == '':
+			temp = '.'
+		rec.samples[sample]['RN_H2'] = temp
+
+		temp = ','.join([x for x in read_name_dict['H0']])
+		if temp == '':
+			temp = '.'
+		rec.samples[sample]['RN_H0'] = temp
 
 		rec.samples[sample]['N_H1'] = len(num_bp_dict['H1'])
 		rec.samples[sample]['N_H2'] = len(num_bp_dict['H2'])
