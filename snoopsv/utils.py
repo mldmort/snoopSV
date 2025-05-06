@@ -452,11 +452,11 @@ def get_seq_start_stop_idx(read, ref_start, ref_stop):
 		return seq_start, seq_stop, blank_start, blank_stop
 
 	### handle the case where mapped read starts in the middle of ref_start:ref_stop
-	if read_ref_start > ref_start:
+	if read_ref_start >= ref_start:
 		seq_start = 0
 
 	### handle the case where mapped read stops in the middle of ref_start:ref_stop
-	if read_ref_stop < ref_stop:
+	if read_ref_stop <= ref_stop:
 		seq_stop = len(query_sequence)
 
 	### even for - strand reads the sequence in the bam file is reported as if it is on the + strand. So the CIGAR which starts from left to right is consistant with the sequence itself. so you don't need to reverse complement the sequences.
@@ -493,7 +493,7 @@ def get_seq_start_stop_idx(read, ref_start, ref_stop):
 				seq_start = cur_seq_pos
 				blank_start = nxt_ref_pos - ref_start
 			else:
-				assert 0==1, 'wrong cur_cigar: '+cur_cigar+', cur_cigar should not be I. should be cought earlier'
+				assert 0==1, f'wrong cur_cigar: {cur_cigar}, cur_cigar should not be I. should be cought earlier. read ref start: {read.reference_start}, read ref end: {read.reference_end}, read name: {read.query_name}'
 		if (ref_stop >= cur_ref_pos) and (ref_stop <= nxt_ref_pos) and (seq_stop == -1):
 			if (cur_cigar == 'M'):
 				#print('seq_stop set at M, cur_ref_pos:', cur_ref_pos, 'nxt_ref_pos:', nxt_ref_pos, 'ref_stop:', ref_stop)
