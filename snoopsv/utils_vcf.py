@@ -81,6 +81,8 @@ def add_header_lines_methyl(header_in, prefix='', extra_fields_list=None):
 	'##FORMAT=<ID=N_H1,Number=1,Type=Integer,Description="number of supporting reads in H1, from snoopSV">',
 	'##FORMAT=<ID=N_H2,Number=1,Type=Integer,Description="number of supporting reads in H2, from snoopSV">',
 	'##FORMAT=<ID=N_H0,Number=1,Type=Integer,Description="number of supporting reads in H0, from snoopSV">',
+	'##FORMAT=<ID=PS_H1,Number=.,Type=String,Description="phase set for read names in H1, from snoopSV">',
+	'##FORMAT=<ID=PS_H2,Number=.,Type=String,Description="phase set for read names in H2, from snoopSV">',
 	]
 	for line in new_header_INFO + new_header_FORMAT:
 		header_in.add_line(line)

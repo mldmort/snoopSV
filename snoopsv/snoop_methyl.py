@@ -115,6 +115,7 @@ def process_methylation(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec,
 		methyl_prob_dict = {'H1':[], 'H2':[], 'H0':[]}
 		num_bp_dict = {'H1':[], 'H2':[], 'H0':[]}
 		read_name_dict = {'H1':[], 'H2':[], 'H0':[]}
+		phase_set_dict = {'H1':[], 'H2':[]}
 
 		#sa_supp_any = False
 		for read in fh_bam.fetch(chrom, max(0, start - buffer_length), end + buffer_length):
@@ -130,6 +131,11 @@ def process_methylation(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec,
 						methyl_prob_dict['H'+str(HP)].append(methyl_probs_str)
 						num_bp_dict['H'+str(HP)].append(num_bp)
 						read_name_dict['H'+str(HP)].append(read.query_name)
+						if read.has_tag('PS'):
+							PS = read.get_tag(tag='PS')
+						else:
+							PS = '.'
+						phase_set_dict['H'+str(HP)].append(str(PS))
 					else:
 						methyl_prob_dict['H0'].append(methyl_probs_str)
 						num_bp_dict['H0'].append(num_bp)
@@ -185,6 +191,16 @@ def process_methylation(annot_file, vcf_in, vcf_out, contig, sample, bam, n_sec,
 		rec.samples[sample]['N_H1'] = len(num_bp_dict['H1'])
 		rec.samples[sample]['N_H2'] = len(num_bp_dict['H2'])
 		rec.samples[sample]['N_H0'] = len(num_bp_dict['H0'])
+
+		temp = ','.join([x for x in phase_set_dict['H1']])
+		if temp == '':
+			temp = '.'
+		rec.samples[sample]['PS_H1'] = temp
+
+		temp = ','.join([x for x in phase_set_dict['H2']])
+		if temp == '':
+			temp = '.'
+		rec.samples[sample]['PS_H2'] = temp
 
 		fh_vcf_out.write(rec)
 
