@@ -3,10 +3,18 @@
 </p>
 
 # snoopSV
-This tool processes long read data (PacBio or ONT) in the context of structural variations, tandem repeats and methylation likelihood extraction.
-## Genotype structural variations
-Given an input VCF file containing structural variations with types: insertion, deletion, duplication, inversion or BND, snoopSV finds the number of supporting reads and non-supporting reads (reference reads) in each haplotype (if the long reads are phased and haplotagged with HP tag) from a long-read BAM file for a single sample, and genotypes the variants. It also asigns a genotyping quality (GQ, probablity of the GT being correct in Phred scale) and a sample quality (SQ, probablity of the GT being non-reference in Phred scale).
-The subcommand is `nontr` with an example command line:
+This tool processes long-read WGS data (PacBio and ONT), in the context of Structural Variations (SV), Tandem Repeats (TR) and methylation likelihood extraction.
+
+Given a VCF of input SVs, snoopSV determines number of variant-supporting reads and number of reference-supporting reads for each SV and genotypes the calls with genotype qualities.
+
+Given a set of TR regions in bed format, snoopSV determines the base pair deviation of each spanning read and determines genotypes representing base pair deviations in each phase (given the input reads are phased).
+
+Given a set of genomic regions in bed format, snoopSV extracts methylation likelihood information of each CpG site in the regions for each read in a VCF format.
+
+## Genotype Structural Variations
+Given an input VCF file containing SVs (INS, DEL, DUP, INV or BND), snoopSV finds the number of variant-supporting reads and reference-supporting reads in each haplotype (given the input reads are phased with HP tags) from an input BAM file for a single sample, and genotypes the variants. It also asigns a genotyping quality (GQ, probablity of the genotype being correct in Phred scale) and a sample quality (SQ, probablity of the genotype being non-reference in Phred scale) to each variant.
+
+Example command line:
 ```
 snoopsv nontr -v <input vcf> -o <output vcf> -s <sample name> -b <bam file>
 ```
@@ -61,14 +69,18 @@ options:
   --exclude-contig [EXCLUDE_CONTIG ...]
                         contig names to exclude from processing.
 ```
-## Genotype tandem repeat regions
-Given a BED file containing the TR regions of interest, snoopSV detects the base pair deviation from the reference for each long read in each TR region and reports them in the output VCF file. This data is reported for each haplotype separately in the VCF file (if the long reads are phased and haplotagged with HP tag). A genotype is assigned based on the median of the deviations for each haplotype. Currently, there is no genotyping quality reported, however, the number of reads (in each haplotype) is a metric that can be used for filteration.
+## Genotype Tandem Repeats
+Given a BED file containing TR regions of interest, snoopSV detects the base pair deviation from the reference for each spanning long read in each TR region and reports them in the output VCF file. This data is reported for each haplotype separately in the VCF file (given the input reads are phased with HP tags). A genotype is assigned based on the median of the base pair deviations in the reads for each haplotype. Currently, there is no genotyping quality reported, however, the number of reads (in each haplotype) is a metric that can be used for filteration.
+
+Example command line:
 ```
 snoopsv tr -a <tr bed file> -v <input vcf> -o <output vcf> -s <sample name> -b <bam file>
 ```
+
 ### Notes about the input parameters
-- The input VCF if only used for the header to be copied in the output file. There should not be any lines or any samples (optionally other than the sample of interest) in this VCF file.
-- The tr bed file should have at least three columns: chrom, start, end. If extra columns exist, they will be added to the INFO field of the output VCF, and it must have a header starting with "#" to name the extra fields, or alternatively provide the header names with another input option: --annot-columns.
+- The purpose of the \<input vcf\> is for its header to be copied to the output file. So you can have your default header lines (such as contig definitions) in this file. Other necessary INFO and FORMAT fields will be added to the output header by snoopSV. There should not be any variants or any samples in this VCF file.
+- \<tr bed file\> should have at least three columns: chrom, start, end. If extra columns exist, you should name all columns in the first comment line (starting with "#"), or alternatively provide the column names with an input option: `--annot-columns`. The values of the extra columns will be added to the INFO field of the output VCF unless otherwise is explicitly specified with options such as: `--include-columns` or `--exclude-columns`.
+
 ```
 usage: snoopsv tr [-h] -a ANNOT_FILE -v VCF_IN -o VCF_OUT [--header-lines HEADER_LINES] -s SAMPLE -b BAM [-c CONTIG] [-n N_SECTION] [-i I_SECTION] [-l L_MAX] [-r R_MIN]
                   [--mapping-quality-thr MAPPING_QUALITY_THR] [--buffer-length BUFFER_LENGTH] [--annot-columns ANNOT_COLUMNS] [--include-columns INCLUDE_COLUMNS]
