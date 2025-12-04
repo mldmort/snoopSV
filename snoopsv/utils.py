@@ -536,6 +536,21 @@ def get_ml(read, ref_start, ref_stop):
 		read_mm = read.get_tag(tag="MM")
 		read_ml = read.get_tag(tag="ML")
 
+		### extract the 5mC part
+		read_mm_main = None
+		ml_len = 0 # placeholder for useful length of read_ml
+		ml_skip = 0 # placeholder for number of bps we should skip in the begining of read_ml
+		for r_s in read_mm.split(';'):
+			if r_s[:3] == "C+m":
+				read_mm_main = r_s + ";" # we add ; because we have omitted it in split before (MM tag returns that)
+				break
+			else:
+				ml_skip += (len(r_s.split(",")) - 1) # one is subracted for strings like A+a.
+		if read_mm_main:
+			ml_len = len(read_mm_main.split(",")) - 1 # one is subracted for strings like C+m?
+		read_mm = read_mm_main
+		read_ml = read_ml[ml_skip:(ml_skip+ml_len)]
+
 	if read_mm == None:
 		return [], num_bp
 
@@ -658,5 +673,5 @@ def get_ml(read, ref_start, ref_stop):
 			for i in query_mm_idxs[mm_stop_idx-4:mm_stop_idx]:
 				print(i)
 				print(query_sequence[i-3:i+4])
-	
+
 	return return_ml_probs, num_bp
