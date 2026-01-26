@@ -3,6 +3,8 @@
 </p>
 
 # snoopSV
+<a href="https://doi.org/10.5281/zenodo.18381246"><img src="https://zenodo.org/badge/371218788.svg" alt="DOI"></a>
+
 This tool processes long-read WGS data (PacBio and ONT), in the context of Structural Variations (SV), Tandem Repeats (TR) and methylation likelihood extraction.
 
 Given a VCF of input SVs, snoopSV determines number of variant-supporting reads and number of reference-supporting reads for each SV and genotypes the calls with genotype qualities.
