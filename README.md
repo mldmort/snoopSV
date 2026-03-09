@@ -209,3 +209,6 @@ micromamba env create -n <snoopsv> -f requirements.txt python=3.10
 micromamba activate <snoopsv>
 make
 ```
+
+## Citation
+Please cite our paper at: https://www.cell.com/cell-genomics/fulltext/S2666-979X(26)00048-0
